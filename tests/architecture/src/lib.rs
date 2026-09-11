@@ -11,7 +11,8 @@ mod tests {
     #[test]
     fn identity_core_accepts_a_test_random_adapter() {
         let mut random = DeterministicRandom::new(7);
-        let identity = provision_local_identity_id(&mut random).expect("deterministic adapter must succeed");
+        let identity =
+            provision_local_identity_id(&mut random).expect("deterministic adapter must succeed");
         assert_eq!(identity.id.as_bytes()[0], 7);
         assert_eq!(identity.id.as_bytes()[15], 22);
     }
