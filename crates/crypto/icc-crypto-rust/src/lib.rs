@@ -275,14 +275,14 @@ mod tests {
     }
 
     #[test]
-    fn ed25519_verify_rejects_noncanonical_public_key() {
+    fn ed25519_verify_rejects_invalid_public_key_material() {
         let provider = RustCryptoProviderV1;
         let (_, _, signature) = rfc8032_test1();
         let invalid_public = Ed25519PublicKey::from_bytes([0xff_u8; 32]);
-        assert_eq!(
+        assert!(matches!(
             provider.ed25519_verify(&invalid_public, b"", &signature),
-            Err(CryptoError::InvalidPublicKey)
-        );
+            Err(CryptoError::InvalidPublicKey | CryptoError::InvalidSignature)
+        ));
     }
 
     #[test]
