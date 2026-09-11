@@ -11,7 +11,9 @@ The repository currently contains the Phase 0 architecture/security baselines, P
 - Linux-specific code is isolated in Linux adapters.
 - Domain Core does not directly depend on crypto-provider implementation crates.
 - Local authorization remains authority-side; UI/CLI is not a security authority.
-- Secret wrapper types remain inside the crypto boundary and are not App/wire/persistent APIs.
+- The current repository dependency policy rejects direct production App dependencies on `icc-crypto-api` and `icc-crypto-rust`.
+- Secret wrapper identifiers are additionally guarded by conservative source checks outside the crypto boundary.
+- These repository/CI checks are not Rust visibility guarantees, runtime sandboxing, or formal proofs.
 - Production dependency resolution is committed in the root `Cargo.lock`.
 
 ## Toolchain
@@ -38,14 +40,23 @@ AEAD:          ChaCha20-Poly1305
 
 ## Verification commands
 
-The commands below match `.github/workflows/ci.yml`.
+The main verification sequence below mirrors `.github/workflows/ci.yml`.
 
 ```bash
-# Locked dependency graph
-cargo metadata --locked --format-version 1
+# Pinned toolchain and bare-metal target
+rustup toolchain install 1.98.1 --profile minimal --component rustfmt,clippy
+rustup target add --toolchain 1.98.1 thumbv7em-none-eabi
+rustc --version
+cargo --version
 
-# Architecture / supply-chain inventory
-python3 scripts/dependency_inventory.py /tmp/icc-cargo-metadata.json   # CI writes metadata here
+# Committed locked dependency graph
+test -f Cargo.lock
+cargo metadata --locked --format-version 1 > /tmp/icc-cargo-metadata.json
+git diff --exit-code -- Cargo.lock
+
+# Resolved dependency inventory and architecture policy tests
+python3 scripts/dependency_inventory.py /tmp/icc-cargo-metadata.json
+python3 -m unittest discover -s scripts -p 'test_*.py'
 python3 scripts/check_architecture.py
 
 # Rust checks
@@ -54,8 +65,7 @@ cargo check --workspace --locked
 cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo test --workspace --locked
 
-# Bare-metal portability target installed by CI
-rustup target add --toolchain 1.98.1 thumbv7em-none-eabi
+# Bare-metal no_std portability checks
 cargo check -p icc-types --target thumbv7em-none-eabi --no-default-features --locked
 cargo check -p icc-error --target thumbv7em-none-eabi --no-default-features --locked
 cargo check -p icc-rights --target thumbv7em-none-eabi --no-default-features --locked
@@ -65,19 +75,16 @@ cargo check -p icc-identity-core --target thumbv7em-none-eabi --no-default-featu
 cargo check -p icc-crypto-api --target thumbv7em-none-eabi --no-default-features --locked
 cargo check -p icc-crypto-rust --target thumbv7em-none-eabi --no-default-features --locked
 
-# Dependency policy tool (CI pins the exact tool version and uses its packaged lockfile)
+# Dependency policy tool; CI pins the exact version and uses the tool package lockfile
 cargo install --locked --version 0.20.2 cargo-deny
-cargo deny check advisories bans licenses sources
+cargo deny --metadata-path /tmp/icc-cargo-metadata.json check advisories bans licenses sources
 
-# Release build uses the committed graph
+# Repeated locked release build and lockfile stability
+sha256sum Cargo.lock > /tmp/icc-cargo-lock.sha256
 cargo build --workspace --release --locked
-```
-
-When reproducing the CI inventory locally, first save metadata:
-
-```bash
-cargo metadata --locked --format-version 1 > /tmp/icc-cargo-metadata.json
-python3 scripts/dependency_inventory.py /tmp/icc-cargo-metadata.json
+cargo build --workspace --release --locked
+sha256sum --check /tmp/icc-cargo-lock.sha256
+git diff --exit-code -- Cargo.lock
 ```
 
 ## Demo
@@ -85,10 +92,9 @@ python3 scripts/dependency_inventory.py /tmp/icc-cargo-metadata.json
 ```bash
 cargo run -p indie-cli --locked -- doctor
 cargo run -p indie-cli --locked -- demo
-cargo run -p indie-cli --locked -- crypto-demo
 ```
 
-`crypto-demo` intentionally demonstrates only non-secret operations (profile and SHA-256). Signing/key-agreement/AEAD secret-material tests live inside the crypto provider test boundary. The project does not introduce a Phase 4 KeyStore early merely to preserve a CLI demo.
+The CLI deliberately does not depend directly on the internal crypto API/provider. Secret cryptographic operations remain exercised in provider tests; this Phase 2 hardening work does not invent a facade, service, Identity feature, or Phase 4 KeyStore merely to preserve a crypto CLI demo.
 
 ## Security and design documents
 
@@ -99,7 +105,7 @@ cargo run -p indie-cli --locked -- crypto-demo
 - `docs/Phase_1_Project_Skeleton_and_Engineering_Baseline_v0.1.md`
 - `docs/Phase_2_Cryptographic_Foundation_v0.1.md`
 - `docs/security/Phase_2_Dependency_Review_v0.1.md`
-- `docs/Phase_2_Cryptographic_Hardening_Report_v0.1.md` (added by the hardening branch)
+- `docs/Phase_2_Cryptographic_Hardening_Report_v0.1.md`
 - `docs/adr/ADR-0001` through `ADR-0006`
 
 This is a prototype architecture/security baseline, not a production security product. See `SECURITY.md` for explicit non-claims and remaining reporting/governance risks.
