@@ -24,6 +24,13 @@ jobs:
           rustc --version
           cargo --version
 
+      - name: Resolve dependency graph for lockfile bootstrap
+        run: |
+          cargo generate-lockfile
+          echo '-----BEGIN ICC CARGO.LOCK-----'
+          cat Cargo.lock
+          echo '-----END ICC CARGO.LOCK-----'
+
       - name: Architecture boundary check
         run: python3 scripts/check_architecture.py
 
