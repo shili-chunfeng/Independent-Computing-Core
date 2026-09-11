@@ -1,0 +1,17 @@
+[package]
+name = "icc-crypto-rust"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+chacha20poly1305 = { version = "=0.11.0", default-features = false, features = ["alloc", "zeroize"] }
+ed25519-dalek = { version = "=3.0.0", default-features = false, features = ["zeroize"] }
+hkdf = { version = "=0.13.0", default-features = false }
+icc-crypto-api = { path = "../icc-crypto-api" }
+sha2 = { version = "=0.11.0", default-features = false }
+x25519-dalek = { version = "=3.0.0", default-features = false, features = ["static_secrets", "zeroize"] }
+
+[lints]
+workspace = true
