@@ -11,17 +11,14 @@ extern crate alloc;
 
 use alloc::vec::Vec;
 use chacha20poly1305::{
-    ChaCha20Poly1305,
-    KeyInit,
-    Nonce,
+    ChaCha20Poly1305, KeyInit, Nonce,
     aead::{Aead, Payload},
 };
 use ed25519_dalek::{Signature, Signer, SigningKey, VerifyingKey};
 use hkdf::Hkdf;
 use icc_crypto_api::{
-    AeadKey32, CryptoError, CryptoProviderV1, DerivedKey32, Digest256,
-    Ed25519PublicKey, Ed25519Signature, Ed25519SigningSeed, Nonce96,
-    SharedSecret32, X25519PublicKey, X25519Secret,
+    AeadKey32, CryptoError, CryptoProviderV1, DerivedKey32, Digest256, Ed25519PublicKey,
+    Ed25519Signature, Ed25519SigningSeed, Nonce96, SharedSecret32, X25519PublicKey, X25519Secret,
 };
 use sha2::{Digest, Sha256};
 use x25519_dalek::{PublicKey as DalekX25519PublicKey, StaticSecret};
@@ -112,7 +109,13 @@ impl CryptoProviderV1 for RustCryptoProviderV1 {
             .map_err(|_| CryptoError::InvalidKey)?;
         let nonce = Nonce::from(nonce.to_bytes());
         cipher
-            .encrypt(&nonce, Payload { msg: plaintext, aad })
+            .encrypt(
+                &nonce,
+                Payload {
+                    msg: plaintext,
+                    aad,
+                },
+            )
             .map_err(|_| CryptoError::AuthenticationFailed)
     }
 
@@ -148,10 +151,9 @@ mod tests {
         assert_eq!(
             provider.sha256(b"abc").to_bytes(),
             [
-                0xba, 0x78, 0x16, 0xbf, 0x8f, 0x01, 0xcf, 0xea,
-                0x41, 0x41, 0x40, 0xde, 0x5d, 0xae, 0x22, 0x23,
-                0xb0, 0x03, 0x61, 0xa3, 0x96, 0x17, 0x7a, 0x9c,
-                0xb4, 0x10, 0xff, 0x61, 0xf2, 0x00, 0x15, 0xad,
+                0xba, 0x78, 0x16, 0xbf, 0x8f, 0x01, 0xcf, 0xea, 0x41, 0x41, 0x40, 0xde, 0x5d, 0xae,
+                0x22, 0x23, 0xb0, 0x03, 0x61, 0xa3, 0x96, 0x17, 0x7a, 0x9c, 0xb4, 0x10, 0xff, 0x61,
+                0xf2, 0x00, 0x15, 0xad,
             ]
         );
     }
@@ -162,7 +164,10 @@ mod tests {
         let seed = Ed25519SigningSeed::from_bytes([7_u8; 32]);
         let public = provider.ed25519_public_from_seed(&seed);
         let signature = provider.ed25519_sign(&seed, b"ICC test message").unwrap();
-        assert_eq!(provider.ed25519_verify(&public, b"ICC test message", &signature), Ok(()));
+        assert_eq!(
+            provider.ed25519_verify(&public, b"ICC test message", &signature),
+            Ok(())
+        );
         assert_eq!(
             provider.ed25519_verify(&public, b"tampered", &signature),
             Err(CryptoError::InvalidSignature)
@@ -176,8 +181,12 @@ mod tests {
         let bob_secret = X25519Secret::from_bytes([0x22_u8; 32]);
         let alice_public = provider.x25519_public_from_secret(&alice_secret);
         let bob_public = provider.x25519_public_from_secret(&bob_secret);
-        let alice_shared = provider.x25519_shared_secret(&alice_secret, &bob_public).unwrap();
-        let bob_shared = provider.x25519_shared_secret(&bob_secret, &alice_public).unwrap();
+        let alice_shared = provider
+            .x25519_shared_secret(&alice_secret, &bob_public)
+            .unwrap();
+        let bob_shared = provider
+            .x25519_shared_secret(&bob_secret, &alice_public)
+            .unwrap();
         assert_eq!(alice_shared.expose_secret(), bob_shared.expose_secret());
     }
 
@@ -192,7 +201,9 @@ mod tests {
             .chacha20poly1305_seal(&key, nonce, aad, plaintext)
             .unwrap();
         assert_eq!(
-            provider.chacha20poly1305_open(&key, nonce, aad, &sealed).unwrap(),
+            provider
+                .chacha20poly1305_open(&key, nonce, aad, &sealed)
+                .unwrap(),
             plaintext
         );
         sealed[0] ^= 1;
