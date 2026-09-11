@@ -26,7 +26,7 @@ The project also does not currently claim protection against:
 - formal verification of the cryptographic composition or Rust implementation;
 - complete elimination of all compiler-created or register/stack copies of secret material.
 
-Passing `no_std`, known-answer vectors, cargo-deny, or zeroization checks must not be interpreted as establishing any of the claims above.
+Passing `no_std`, known-answer vectors, cargo-deny, architecture source scans, or zeroization checks must not be interpreted as establishing any of the claims above.
 
 ## Phase 2 cryptographic rules
 
@@ -53,9 +53,13 @@ Security-critical rules include:
 - L0/L1/L2 portable crates must preserve the Phase 0.3 dependency direction and `no_std` contract.
 - Linux-specific APIs remain in platform adapters.
 - Domain Core must not directly depend on provider implementation crates.
+- The current per-package repository policy rejects direct production App dependencies on `icc-crypto-api` and `icc-crypto-rust`.
+- `icc-identity-core -> icc-platform-api` is an explicit reviewed Phase 1 Port dependency-inversion edge; it does not authorize a general L2-to-Port dependency rule.
+- New, unclassified workspace packages and unreviewed direct external dependencies fail the architecture policy check.
 - Production dependency resolution is committed in `Cargo.lock` and CI uses `--locked`.
-- CI checks the current locked graph for advisories, license policy, source policy, banned crates/features, architecture boundaries, standards-based tests, and a bare-metal `thumbv7em-none-eabi` compile target.
-- These checks are time-bounded evidence, not proof that dependencies have no vulnerabilities or unsafe code.
+- CI checks the current locked graph for advisories, license policy, source policy, banned crates/features, architecture boundaries, architecture negative fixtures, standards-based tests, and a bare-metal `thumbv7em-none-eabi` compile target.
+- Secret-trait/source checks are conservative text/source analysis. They do not establish Rust visibility, prevent arbitrary runtime code execution, provide a sandbox, or constitute compiler/AST/formal proof.
+- Dependency and advisory checks are time-bounded evidence, not proof that dependencies have no vulnerabilities, unsafe code, or future maintenance risk.
 
 ## Vulnerability reporting
 
@@ -68,3 +72,7 @@ Until the repository owner explicitly selects a private reporting channel, this 
 ## Project license
 
 No owner-approved repository `LICENSE` has been selected in this Phase 2 hardening work. Dependency-license policy does not assign a license to ICC itself. Project licensing remains an owner decision.
+
+## Repository governance
+
+At the time of this hardening review, `main` is not protected by a GitHub branch-protection rule/ruleset. Therefore direct-push prevention is **not enforced by GitHub**. This hardening task does not change repository governance settings; owner action is required if protected-branch enforcement is desired.
