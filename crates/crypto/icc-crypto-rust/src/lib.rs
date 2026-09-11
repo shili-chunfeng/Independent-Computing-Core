@@ -242,7 +242,10 @@ mod tests {
         let (seed, expected_public, expected_signature) = rfc8032_test1();
 
         assert_eq!(provider.ed25519_public_from_seed(&seed), expected_public);
-        assert_eq!(provider.ed25519_sign(&seed, b"").unwrap(), expected_signature);
+        assert_eq!(
+            provider.ed25519_sign(&seed, b"").unwrap(),
+            expected_signature
+        );
         assert_eq!(
             provider.ed25519_verify(&expected_public, b"", &expected_signature),
             Ok(())
@@ -266,11 +269,7 @@ mod tests {
         let mut tampered = signature.to_bytes();
         tampered[0] ^= 1;
         assert_eq!(
-            provider.ed25519_verify(
-                &public,
-                b"",
-                &Ed25519Signature::from_bytes(tampered)
-            ),
+            provider.ed25519_verify(&public, b"", &Ed25519Signature::from_bytes(tampered)),
             Err(CryptoError::InvalidSignature)
         );
     }
@@ -306,15 +305,12 @@ mod tests {
         let bob_secret = X25519Secret::from_bytes(hex::<32>(
             "5dab087e624a8a4b79e17f8b83800ee66f3bb1292618b6fd1c2f8b27ff88e0eb",
         ));
-        let expected_alice_public = hex::<32>(
-            "8520f0098930a754748b7ddcb43ef75a0dbf3a0d26381af4eba4a98eaa9b4e6a",
-        );
-        let expected_bob_public = hex::<32>(
-            "de9edb7d7b7dc1b4d35b61c2ece435373f8343c85b78674dadfc7e146f882b4f",
-        );
-        let expected_shared = hex::<32>(
-            "4a5d9d5ba4ce2de1728e3bf480350f25e07e21c947d19e3376f09b3c1e161742",
-        );
+        let expected_alice_public =
+            hex::<32>("8520f0098930a754748b7ddcb43ef75a0dbf3a0d26381af4eba4a98eaa9b4e6a");
+        let expected_bob_public =
+            hex::<32>("de9edb7d7b7dc1b4d35b61c2ece435373f8343c85b78674dadfc7e146f882b4f");
+        let expected_shared =
+            hex::<32>("4a5d9d5ba4ce2de1728e3bf480350f25e07e21c947d19e3376f09b3c1e161742");
 
         let alice_public = provider.x25519_public_from_secret(&alice_secret);
         let bob_public = provider.x25519_public_from_secret(&bob_secret);
