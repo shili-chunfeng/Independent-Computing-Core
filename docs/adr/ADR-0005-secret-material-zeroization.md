@@ -23,7 +23,7 @@ The Linux prototype also explicitly treats a compromised root/kernel as outside 
 5. Phase 2 CLI/demo code must not construct or retain raw private-key/seed wrappers.
 6. Phase 2 does not invent an early KeyStore only to preserve a demo. Future normal callers will use opaque `KeyHandle`-style operations when the KeyStore phase is designed.
 7. Provider-internal temporary secret values are permitted only inside the crypto implementation boundary and remain subject to documented residual-copy limitations.
-8. Architecture checks enforce the wrapper boundary and forbidden traits, but those checks are conservative source/metadata checks rather than a formal Rust AST proof.
+8. Repository architecture checks enforce reviewed direct dependency edges, secret-wrapper identifiers outside the crypto boundary, and forbidden secret traits. These are conservative source/metadata checks rather than Rust visibility guarantees, runtime sandboxing, compiler/AST validation, or formal proof.
 
 ## Alternatives Considered
 
@@ -51,13 +51,14 @@ Rejected. Zeroization can protect owned storage from ordinary compiler dead-stor
 
 Positive:
 
-- App/CLI code cannot legitimately obtain ICC secret wrapper values.
-- Accidental `Debug` logging and implicit cloning/copying are reduced.
+- The current production dependency policy rejects direct App/CLI dependencies on `icc-crypto-api` and `icc-crypto-rust`; this is repository/CI architecture enforcement, not a language-level or runtime isolation guarantee.
+- Accidental `Debug` logging and implicit cloning/copying are reduced by the secret-type policy and conservative source checks.
 - Owned secret wrapper storage receives best-effort cleanup on destruction.
 - The future KeyStore can replace raw-secret calling patterns without first undoing an App-facing API.
 
 Limitations / remaining risks:
 
+- Repository source checks do not prove every possible Rust syntax/aliasing construction is impossible.
 - Third-party crypto implementation internals and compiler-created temporary copies are not proven to be zeroized.
 - Root/kernel compromise, memory extraction, crash dumps, swap/hibernation, and physical/side-channel attacks remain outside the Phase 2 guarantee.
 - No formal verification or source-level third-party unsafe audit is implied.
