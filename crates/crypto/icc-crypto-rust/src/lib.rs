@@ -332,10 +332,10 @@ mod tests {
         let provider = RustCryptoProviderV1;
         let secret = X25519Secret::from_bytes([0x42_u8; 32]);
         let zero_peer = X25519PublicKey::from_bytes([0_u8; 32]);
-        assert_eq!(
+        assert!(matches!(
             provider.x25519_shared_secret(&secret, &zero_peer),
             Err(CryptoError::NonContributoryKeyAgreement)
-        );
+        ));
     }
 
     fn rfc8439_aead_material() -> (AeadKey32, Nonce96, [u8; 12], &'static [u8]) {
