@@ -1,9 +1,9 @@
 #![no_std]
 #![forbid(unsafe_code)]
 
-extern crate alloc;
-
 //! Narrow platform-neutral Ports for external effects.
+
+extern crate alloc;
 
 use alloc::vec::Vec;
 use icc_error::PlatformError;
