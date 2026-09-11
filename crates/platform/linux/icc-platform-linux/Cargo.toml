@@ -1,0 +1,15 @@
+[package]
+name = "icc-platform-linux"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+getrandom = "=0.4.3"
+icc-error = { path = "../../../core/icc-error" }
+icc-platform-api = { path = "../../../ports/icc-platform-api" }
+icc-types = { path = "../../../core/icc-types" }
+
+[lints]
+workspace = true
