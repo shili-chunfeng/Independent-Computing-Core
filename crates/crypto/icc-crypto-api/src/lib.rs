@@ -203,6 +203,8 @@ mod tests {
     fn algorithm_ids_are_stable_for_v1() {
         assert_eq!(CryptoProfileId::ClassicalV1 as u16, 0x0001);
         assert_eq!(HashAlgorithmId::Sha256 as u16, 0x0001);
+        assert_eq!(KdfAlgorithmId::HkdfSha256 as u16, 0x0001);
+        assert_eq!(KdfAlgorithmId::Argon2idV13 as u16, 0x0101);
         assert_eq!(SignatureAlgorithmId::Ed25519 as u16, 0x0001);
         assert_eq!(KeyAgreementAlgorithmId::X25519 as u16, 0x0001);
         assert_eq!(AeadAlgorithmId::ChaCha20Poly1305 as u16, 0x0001);
