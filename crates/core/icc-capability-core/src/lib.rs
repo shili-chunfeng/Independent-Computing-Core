@@ -144,7 +144,12 @@ mod tests {
             required: Rights::READ,
         };
         assert_eq!(
-            authorize(&grant(), &request, MonotonicMs::new(100), Generation::new(7)),
+            authorize(
+                &grant(),
+                &request,
+                MonotonicMs::new(100),
+                Generation::new(7)
+            ),
             AuthorizationDecision::Deny(DomainError::Expired)
         );
     }
