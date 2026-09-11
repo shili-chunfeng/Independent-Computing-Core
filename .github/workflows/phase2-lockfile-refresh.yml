@@ -1,0 +1,28 @@
+name: phase2-lockfile-refresh
+
+on:
+  push:
+
+permissions:
+  contents: read
+
+jobs:
+  generate:
+    if: github.ref == 'refs/heads/phase-2-cryptographic-hardening'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install pinned Rust toolchain
+        run: rustup toolchain install 1.98.1 --profile minimal
+
+      - name: Generate lockfile for intended CLI dependency removal
+        run: |
+          sed -i '/icc-crypto-api =/d; /icc-crypto-rust =/d' apps/indie-cli/Cargo.toml
+          cargo generate-lockfile
+          echo '-----BEGIN ICC GENERATED CARGO.LOCK BASE64-----'
+          base64 -w0 Cargo.lock
+          echo
+          echo '-----END ICC GENERATED CARGO.LOCK BASE64-----'
