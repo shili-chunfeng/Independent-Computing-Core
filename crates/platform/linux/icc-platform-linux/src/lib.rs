@@ -33,7 +33,8 @@ impl Clock for LinuxClock {
         let duration = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_err(|_| PlatformError::ClockUnavailable)?;
-        let millis = u64::try_from(duration.as_millis()).map_err(|_| PlatformError::ClockUnavailable)?;
+        let millis =
+            u64::try_from(duration.as_millis()).map_err(|_| PlatformError::ClockUnavailable)?;
         Ok(WallTimeMs::new(millis))
     }
 
