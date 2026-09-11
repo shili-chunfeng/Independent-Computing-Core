@@ -293,8 +293,6 @@ name = "indie-cli"
 version = "0.2.0"
 dependencies = [
  "icc-capability-core",
- "icc-crypto-api",
- "icc-crypto-rust",
  "icc-identity-core",
  "icc-platform-api",
  "icc-platform-linux",
