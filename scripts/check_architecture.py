@@ -1,18 +1,36 @@
 #!/usr/bin/env python3
-"""Dependency/boundary guard for Phase 2.
+"""Phase 2 architecture/dependency boundary guard.
 
-This is intentionally conservative and dependency-free. It is not a Rust parser.
-It catches obvious architecture regressions before compiler/CI checks.
+This checker deliberately combines conservative source-token checks with Cargo's
+resolved dependency graph from `cargo metadata --locked`. It is NOT a Rust AST
+validator and does not claim to prove absence of every possible boundary escape.
 """
 
+from __future__ import annotations
+
+import json
 from pathlib import Path
+import re
+import subprocess
 import sys
 import tomllib
 
 ROOT = Path(__file__).resolve().parents[1]
 CORE = ROOT / "crates" / "core"
 PORTS = ROOT / "crates" / "ports"
-CRYPTO_API = ROOT / "crates" / "crypto" / "icc-crypto-api"
+CRYPTO = ROOT / "crates" / "crypto"
+CRYPTO_API = CRYPTO / "icc-crypto-api"
+PLATFORM = ROOT / "crates" / "platform"
+APPS = ROOT / "apps"
+LOCKFILE = ROOT / "Cargo.lock"
+
+SECRET_WRAPPERS = {
+    "Ed25519SigningSeed",
+    "X25519Secret",
+    "SharedSecret32",
+    "AeadKey32",
+    "DerivedKey32",
+}
 
 FORBIDDEN_CORE_TOKENS = {
     "std::fs": "filesystem access belongs in an adapter",
@@ -20,6 +38,11 @@ FORBIDDEN_CORE_TOKENS = {
     "std::env": "environment access belongs in the composition layer",
     "std::process": "process creation belongs in runtime/platform code",
     "std::os": "OS-specific APIs cannot enter Domain Core",
+    "SystemTime": "wall-clock implementation belongs behind a Clock port",
+    "Instant": "monotonic-clock implementation belongs behind a Clock port",
+    "UnixStream": "concrete IPC/network transport cannot enter Domain Core",
+    "TcpStream": "concrete network transport cannot enter Domain Core",
+    "PathBuf": "physical filesystem paths cannot become Domain Core authority",
     "tokio::": "async runtime types cannot enter Domain Core",
     "rusqlite": "database implementation cannot enter Domain Core",
     "reqwest": "HTTP implementation cannot enter Domain Core",
@@ -42,9 +65,45 @@ FORBIDDEN_CRYPTO_API_TOKENS = {
     "std::": "crypto API must remain no_std",
 }
 
+# Approved external direct dependencies for each current Phase 2 layer. This is a
+# direct-edge policy; cargo-deny separately evaluates the resolved transitive graph.
+APPROVED_EXTERNAL: dict[str, set[str]] = {
+    "core": set(),
+    "ports": set(),
+    "crypto_api": {"zeroize"},
+    "crypto_provider": {
+        "chacha20poly1305",
+        "ed25519-dalek",
+        "hkdf",
+        "sha2",
+        "x25519-dalek",
+    },
+    "platform": {"getrandom"},
+    "testing": set(),
+    "app": set(),
+    "test": set(),
+    "other": set(),
+}
+
+ALLOWED_WORKSPACE_EDGES: dict[str, set[str]] = {
+    "core": {"core", "ports", "crypto_api"},
+    "ports": {"core", "ports", "crypto_api"},
+    "crypto_api": {"core", "crypto_api"},
+    "crypto_provider": {"core", "crypto_api", "crypto_provider"},
+    "platform": {"core", "ports"},
+    "testing": {"core", "ports", "testing"},
+    "app": {"core", "ports", "crypto_api", "crypto_provider", "platform"},
+    "test": {"core", "ports", "testing", "crypto_api", "crypto_provider"},
+    "other": set(),
+}
+
+UNSAFE_RE = re.compile(r"\bunsafe\s*(?:\{|fn\b|impl\b|trait\b|extern\b)")
+
 
 def check_tree(base: Path, rules: dict[str, str]) -> list[str]:
-    failures = []
+    failures: list[str] = []
+    if not base.exists():
+        return failures
     for path in base.rglob("*.rs"):
         text = path.read_text(encoding="utf-8")
         for token, reason in rules.items():
@@ -53,10 +112,37 @@ def check_tree(base: Path, rules: dict[str, str]) -> list[str]:
     return failures
 
 
+def require_lockfile_and_locked_metadata() -> tuple[list[str], dict | None]:
+    if not LOCKFILE.is_file():
+        return ["Cargo.lock is required for reproducible Phase 2 dependency resolution"], None
+
+    try:
+        proc = subprocess.run(
+            ["cargo", "metadata", "--locked", "--format-version", "1"],
+            cwd=ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except FileNotFoundError:
+        return ["cargo is required to validate the locked dependency graph"], None
+
+    if proc.returncode != 0:
+        detail = proc.stderr.strip() or proc.stdout.strip() or "unknown cargo metadata failure"
+        return [f"cargo metadata --locked failed: {detail}"], None
+
+    try:
+        return [], json.loads(proc.stdout)
+    except json.JSONDecodeError as error:
+        return [f"cargo metadata returned invalid JSON: {error}"], None
+
+
 def require_no_std() -> list[str]:
-    failures = []
-    bases = [CORE, PORTS, ROOT / "crates" / "crypto"]
+    failures: list[str] = []
+    bases = [CORE, PORTS, CRYPTO]
     for base in bases:
+        if not base.exists():
+            continue
         for crate in base.iterdir():
             if not crate.is_dir():
                 continue
@@ -76,7 +162,7 @@ def classify(path: Path) -> str:
         return "crypto_api"
     if rel[:3] == ("crates", "crypto", "icc-crypto-rust"):
         return "crypto_provider"
-    if rel[:3] == ("crates", "platform", "linux"):
+    if rel[:2] == ("crates", "platform"):
         return "platform"
     if rel[:2] == ("crates", "testing"):
         return "testing"
@@ -87,66 +173,131 @@ def classify(path: Path) -> str:
     return "other"
 
 
-def dependency_boundary_check() -> list[str]:
-    failures = []
-    manifests = list(ROOT.rglob("Cargo.toml"))
+def dependency_boundary_check(metadata: dict) -> list[str]:
+    failures: list[str] = []
+    workspace_ids = set(metadata.get("workspace_members", []))
+    packages = {pkg["id"]: pkg for pkg in metadata.get("packages", [])}
+    workspace_names = {
+        pkg["name"]: classify(Path(pkg["manifest_path"]).parent)
+        for pkg_id, pkg in packages.items()
+        if pkg_id in workspace_ids
+    }
 
-    for manifest in manifests:
-        if manifest == ROOT / "Cargo.toml":
-            continue
-        src_kind = classify(manifest.parent)
-        data = tomllib.loads(manifest.read_text(encoding="utf-8"))
-        package_name = data.get("package", {}).get("name", str(manifest.parent))
-        for table_name in ("dependencies", "dev-dependencies", "build-dependencies"):
-            for dep_name, spec in data.get(table_name, {}).items():
-                if not isinstance(spec, dict) or "path" not in spec:
-                    continue
-                target = (manifest.parent / spec["path"]).resolve()
-                dst_kind = classify(target)
+    for package_id in workspace_ids:
+        package = packages[package_id]
+        src_kind = classify(Path(package["manifest_path"]).parent)
+        package_name = package["name"]
+        allowed_workspace = ALLOWED_WORKSPACE_EDGES.get(src_kind, set())
+        allowed_external = APPROVED_EXTERNAL.get(src_kind, set())
 
-                if src_kind == "core" and dst_kind not in {"core", "ports", "crypto_api"}:
+        for dependency in package.get("dependencies", []):
+            dep_name = dependency["name"]
+            dep_path = dependency.get("path")
+            if dep_path is not None and dep_name in workspace_names:
+                dst_kind = workspace_names[dep_name]
+                if dst_kind not in allowed_workspace:
                     failures.append(
-                        f"{package_name}: core crate depends on forbidden {dst_kind} crate {dep_name}"
+                        f"{package_name}: {src_kind} crate depends on forbidden "
+                        f"workspace layer {dst_kind} via {dep_name}"
                     )
-                if src_kind == "ports" and dst_kind not in {"core", "ports", "crypto_api"}:
-                    failures.append(
-                        f"{package_name}: ports crate depends on forbidden {dst_kind} crate {dep_name}"
-                    )
-                if src_kind == "crypto_api" and dst_kind not in {"core", "crypto_api"}:
-                    failures.append(
-                        f"{package_name}: crypto API depends on forbidden {dst_kind} crate {dep_name}"
-                    )
-                if src_kind == "crypto_provider" and dst_kind not in {"core", "crypto_api", "crypto_provider"}:
-                    failures.append(
-                        f"{package_name}: crypto provider depends on forbidden {dst_kind} crate {dep_name}"
-                    )
+            elif dep_name not in allowed_external:
+                failures.append(
+                    f"{package_name}: unreviewed external direct dependency {dep_name!r} "
+                    f"is not approved for layer {src_kind}"
+                )
 
     return failures
 
 
-def forbid_crypto_implementation_in_domain_core() -> list[str]:
-    failures = []
-    tokens = ("ed25519-dalek", "x25519-dalek", "chacha20poly1305", "sha2", "hkdf")
-    for manifest in CORE.rglob("Cargo.toml"):
+def forbidden_crypto_features() -> list[str]:
+    failures: list[str] = []
+    forbidden = {"hazmat", "legacy_compatibility"}
+    for manifest in ROOT.rglob("Cargo.toml"):
         data = tomllib.loads(manifest.read_text(encoding="utf-8"))
         for table_name in ("dependencies", "dev-dependencies", "build-dependencies"):
-            deps = data.get(table_name, {})
-            for token in tokens:
-                if token in deps:
+            spec = data.get(table_name, {}).get("ed25519-dalek")
+            if not isinstance(spec, dict):
+                continue
+            enabled = set(spec.get("features", []))
+            bad = sorted(enabled & forbidden)
+            if bad:
+                failures.append(
+                    f"{manifest.relative_to(ROOT)}: forbidden ed25519-dalek features enabled: {bad}"
+                )
+    return failures
+
+
+def forbid_secret_wrappers_outside_crypto_boundary() -> list[str]:
+    failures: list[str] = []
+    roots = [APPS, CORE, PORTS, PLATFORM, ROOT / "crates" / "protocol"]
+    for base in roots:
+        if not base.exists():
+            continue
+        for path in base.rglob("*.rs"):
+            text = path.read_text(encoding="utf-8")
+            for secret_name in SECRET_WRAPPERS:
+                if secret_name in text:
                     failures.append(
-                        f"{manifest.relative_to(ROOT)}: Domain Core must depend on icc-crypto-api, not {token}"
+                        f"{path.relative_to(ROOT)}: secret wrapper {secret_name} must stay inside "
+                        "the crypto/keystore boundary"
                     )
+    return failures
+
+
+def secret_wrapper_derive_check() -> list[str]:
+    failures: list[str] = []
+    lib = CRYPTO_API / "src" / "lib.rs"
+    text = lib.read_text(encoding="utf-8")
+    try:
+        macro = text.split("macro_rules! secret32_type", 1)[1].split(
+            "secret32_type!(Ed25519SigningSeed);", 1
+        )[0]
+    except IndexError:
+        return ["icc-crypto-api: secret32_type macro or Ed25519SigningSeed declaration missing"]
+
+    forbidden = ("#[derive", "impl Clone", "impl Copy", "impl Debug", "Serialize", "Deserialize")
+    for token in forbidden:
+        if token in macro:
+            failures.append(
+                f"icc-crypto-api secret32_type macro contains forbidden trait/derive token {token!r}"
+            )
+    for name in SECRET_WRAPPERS:
+        if f"secret32_type!({name});" not in text:
+            failures.append(f"icc-crypto-api: expected secret wrapper declaration missing: {name}")
+    return failures
+
+
+def first_party_unsafe_check() -> list[str]:
+    failures: list[str] = []
+    roots = [CORE, PORTS, CRYPTO, PLATFORM, APPS]
+    for base in roots:
+        if not base.exists():
+            continue
+        for path in base.rglob("*.rs"):
+            text = path.read_text(encoding="utf-8")
+            if UNSAFE_RE.search(text):
+                failures.append(
+                    f"{path.relative_to(ROOT)}: first-party production unsafe requires an explicit ADR"
+                )
     return failures
 
 
 def main() -> int:
-    failures = []
+    failures: list[str] = []
+    metadata_failures, metadata = require_lockfile_and_locked_metadata()
+    failures.extend(metadata_failures)
+
     failures.extend(check_tree(CORE, FORBIDDEN_CORE_TOKENS))
     failures.extend(check_tree(PORTS, FORBIDDEN_PORT_TOKENS))
     failures.extend(check_tree(CRYPTO_API, FORBIDDEN_CRYPTO_API_TOKENS))
     failures.extend(require_no_std())
-    failures.extend(dependency_boundary_check())
-    failures.extend(forbid_crypto_implementation_in_domain_core())
+    failures.extend(forbidden_crypto_features())
+    failures.extend(forbid_secret_wrappers_outside_crypto_boundary())
+    failures.extend(secret_wrapper_derive_check())
+    failures.extend(first_party_unsafe_check())
+
+    if metadata is not None:
+        failures.extend(dependency_boundary_check(metadata))
 
     if failures:
         print("Architecture boundary violations:")
@@ -155,6 +306,10 @@ def main() -> int:
         return 1
 
     print("Architecture boundary check: PASS")
+    print("Locked dependency graph check: PASS")
+    print("Secret material boundary check: PASS")
+    print("First-party production unsafe scan: PASS")
+    print("NOTE: this checker is conservative source/metadata analysis, not a Rust AST proof.")
     return 0
 
 
