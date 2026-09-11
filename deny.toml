@@ -1,0 +1,54 @@
+# Phase 2 dependency security policy for cargo-deny 0.20.2.
+# This governs third-party dependencies only; it does not assign a license to ICC.
+
+[graph]
+all-features = false
+
+[advisories]
+yanked = "deny"
+unmaintained = "workspace"
+ignore = []
+
+[licenses]
+confidence-threshold = 0.93
+unused-allowed-license = "allow"
+allow = [
+    "Apache-2.0",
+    "BSD-3-Clause",
+    "ISC",
+    "MIT",
+    "Unicode-3.0",
+    "Zlib",
+]
+
+[licenses.private]
+# ICC workspace packages are publish = false and do not yet have an owner-approved
+# project license. Ignore those private workspace packages while still checking
+# all third-party registry dependencies.
+ignore = true
+
+[bans]
+multiple-versions = "deny"
+wildcards = "deny"
+allow-wildcard-paths = true
+highlight = "simplest-path"
+workspace-default-features = "allow"
+external-default-features = "allow"
+deny = [
+    { crate = "openssl", reason = "Phase 2 has no OpenSSL dependency boundary" },
+    { crate = "openssl-sys", reason = "Phase 2 has no OpenSSL FFI dependency boundary" },
+    { crate = "reqwest", reason = "HTTP implementations are outside Phase 2 crypto foundations" },
+    { crate = "rusqlite", reason = "database implementations are outside Phase 2 crypto foundations" },
+    { crate = "tokio", reason = "async runtimes must not enter the Phase 2 portable crypto graph" },
+]
+
+[[bans.features]]
+crate = "ed25519-dalek@3.0.0"
+deny = ["hazmat", "legacy_compatibility"]
+reason = "ICC forbids hazardous/legacy verification modes in ClassicalV1"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []
