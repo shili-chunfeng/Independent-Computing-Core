@@ -1,0 +1,39 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/core/icc-types",
+    "crates/core/icc-error",
+    "crates/core/icc-rights",
+    "crates/core/icc-capability-core",
+    "crates/core/icc-identity-core",
+    "crates/ports/icc-platform-api",
+    "crates/crypto/icc-crypto-api",
+    "crates/crypto/icc-crypto-rust",
+    "crates/testing/icc-test-support",
+    "crates/platform/linux/icc-platform-linux",
+    "apps/indie-cli",
+    "tests/architecture",
+]
+
+[workspace.package]
+version = "0.2.0"
+edition = "2024"
+rust-version = "1.98.1"
+authors = ["Independent Computing Core Project"]
+publish = false
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+unused_must_use = "deny"
+
+[workspace.lints.clippy]
+all = "warn"
+
+[profile.dev]
+panic = "unwind"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+panic = "abort"
+strip = "symbols"
