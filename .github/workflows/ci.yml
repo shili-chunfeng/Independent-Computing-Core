@@ -32,6 +32,9 @@ jobs:
           cargo metadata --locked --format-version 1 > /tmp/icc-cargo-metadata.json
           git diff --exit-code -- Cargo.lock
 
+      - name: Resolved dependency inventory
+        run: python3 scripts/dependency_inventory.py /tmp/icc-cargo-metadata.json
+
       - name: Architecture boundary check
         run: python3 scripts/check_architecture.py
 
