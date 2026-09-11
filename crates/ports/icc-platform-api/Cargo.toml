@@ -1,0 +1,13 @@
+[package]
+name = "icc-platform-api"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+icc-error = { path = "../../core/icc-error" }
+icc-types = { path = "../../core/icc-types" }
+
+[lints]
+workspace = true
