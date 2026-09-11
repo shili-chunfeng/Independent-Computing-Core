@@ -35,6 +35,9 @@ jobs:
       - name: Resolved dependency inventory
         run: python3 scripts/dependency_inventory.py /tmp/icc-cargo-metadata.json
 
+      - name: Architecture policy self and negative tests
+        run: python3 -m unittest discover -s scripts -p 'test_*.py'
+
       - name: Architecture boundary check
         run: python3 scripts/check_architecture.py
 
