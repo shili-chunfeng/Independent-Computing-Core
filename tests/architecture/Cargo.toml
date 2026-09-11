@@ -1,0 +1,17 @@
+[package]
+name = "icc-architecture-tests"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+icc-capability-core = { path = "../../crates/core/icc-capability-core" }
+icc-identity-core = { path = "../../crates/core/icc-identity-core" }
+icc-platform-api = { path = "../../crates/ports/icc-platform-api" }
+icc-rights = { path = "../../crates/core/icc-rights" }
+icc-test-support = { path = "../../crates/testing/icc-test-support" }
+icc-types = { path = "../../crates/core/icc-types" }
+
+[lints]
+workspace = true
