@@ -68,12 +68,7 @@ fn demo() -> ExitCode {
         required: Rights::READ,
     };
 
-    let decision = authorize(
-        &grant,
-        &request,
-        MonotonicMs::new(1),
-        Generation::new(1),
-    );
+    let decision = authorize(&grant, &request, MonotonicMs::new(1), Generation::new(1));
 
     println!("identity_id: {:02x?}", identity.id.as_bytes());
     println!("capability_read_decision: {decision:?}");
