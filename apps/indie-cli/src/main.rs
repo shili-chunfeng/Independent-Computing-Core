@@ -4,8 +4,6 @@ use std::env;
 use std::process::ExitCode;
 
 use icc_capability_core::{AccessRequest, AuthorizationDecision, CapabilityGrant, authorize};
-use icc_crypto_api::CryptoProviderV1;
-use icc_crypto_rust::RustCryptoProviderV1;
 use icc_identity_core::provision_local_identity_id;
 use icc_platform_api::Clock;
 use icc_platform_linux::{LinuxClock, LinuxSecureRandom};
@@ -16,9 +14,8 @@ fn main() -> ExitCode {
     match env::args().nth(1).as_deref() {
         Some("doctor") => doctor(),
         Some("demo") => demo(),
-        Some("crypto-demo") => crypto_demo(),
         _ => {
-            eprintln!("usage: indie-cli <doctor|demo|crypto-demo>");
+            eprintln!("usage: indie-cli <doctor|demo>");
             ExitCode::from(2)
         }
     }
@@ -78,15 +75,4 @@ fn demo() -> ExitCode {
     } else {
         ExitCode::FAILURE
     }
-}
-
-fn crypto_demo() -> ExitCode {
-    let provider = RustCryptoProviderV1;
-    let message = b"ICC/crypto-demo/v1\0hello";
-    let digest = provider.sha256(message);
-
-    println!("crypto_profile: classical-v1");
-    println!("sha256: {:02x?}", digest.as_bytes());
-    println!("secret_operations: provider-tests-only");
-    ExitCode::SUCCESS
 }
