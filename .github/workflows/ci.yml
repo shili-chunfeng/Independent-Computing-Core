@@ -1,4 +1,4 @@
-name: phase2-ci
+name: icc-ci
 
 on:
   push:
@@ -68,8 +68,10 @@ jobs:
       - name: Default tests
         run: cargo test --workspace --locked
 
-      - name: Secret trait compile-fail doctests
-        run: cargo test -p icc-crypto-api --doc --locked
+      - name: Security boundary compile-fail doctests
+        run: |
+          cargo test -p icc-crypto-api --doc --locked
+          cargo test -p icc-identity-core --doc --locked
 
       - name: All-features tests
         run: cargo test --workspace --all-features --locked

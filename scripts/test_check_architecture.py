@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Self/negative tests for the production Phase 2 architecture checker."""
+"""Self/negative tests for the production Phase 3 architecture checker."""
 
 from __future__ import annotations
 
@@ -389,8 +389,13 @@ class DependencyDeclarationPolicyTests(unittest.TestCase):
 
     def test_domain_core_to_crypto_provider_is_rejected(self) -> None:
         metadata = metadata_from_policy()
-        add_workspace_declaration(metadata, "icc-capability-core", "icc-crypto-rust")
+        add_workspace_declaration(metadata, "icc-identity-core", "icc-crypto-rust")
         self.assert_rejected(metadata, "package icc-crypto-rust")
+
+    def test_app_to_identity_core_is_rejected(self) -> None:
+        metadata = metadata_from_policy()
+        add_workspace_declaration(metadata, "indie-cli", "icc-identity-core")
+        self.assert_rejected(metadata, "package icc-identity-core")
 
     def test_platform_port_to_linux_adapter_is_rejected(self) -> None:
         metadata = metadata_from_policy()
