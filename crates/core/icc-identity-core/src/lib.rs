@@ -35,8 +35,8 @@ use icc_crypto_api::{CryptoProviderV1, Ed25519PublicKey, Ed25519Signature};
 use icc_error::PlatformError;
 use icc_platform_api::SecureRandom;
 use icc_types::{
-    AppId, AppPseudonymId, DeviceId, EnrollmentId, Generation, IdentityDomainId,
-    IdentityKeyId, RecoveryAttemptId, RecoveryAuthorityId,
+    AppId, AppPseudonymId, DeviceId, EnrollmentId, Generation, IdentityDomainId, IdentityKeyId,
+    RecoveryAttemptId, RecoveryAuthorityId,
 };
 
 pub const MAX_DEVICE_RECORDS: usize = 32;
@@ -413,10 +413,7 @@ impl IdentityCore {
         recovery_policy: RecoveryPolicy,
     ) -> Result<Self, IdentityError> {
         validate_binding(&root, IdentityKeyPurpose::RootAuthorization)?;
-        validate_binding(
-            &initial_device,
-            IdentityKeyPurpose::DeviceAuthentication,
-        )?;
+        validate_binding(&initial_device, IdentityKeyPurpose::DeviceAuthentication)?;
         if bindings_overlap(&root, &initial_device) {
             return Err(IdentityError::DuplicateBinding);
         }
@@ -520,10 +517,9 @@ impl IdentityCore {
                     .any(|pending| pending.device_id == candidate)
         })?);
 
-        self.state.pending_enrollments.insert(
-            enrollment_id,
-            PendingEnrollment { device_id, binding },
-        );
+        self.state
+            .pending_enrollments
+            .insert(enrollment_id, PendingEnrollment { device_id, binding });
         Ok(PendingDeviceEnrollmentView {
             enrollment_id,
             device_id,
@@ -648,8 +644,7 @@ impl IdentityCore {
         signature: &Ed25519Signature,
         provider: &P,
     ) -> Result<DeviceView, IdentityError> {
-        let transcript =
-            self.device_revocation_transcript(approver_device_id, target_device_id)?;
+        let transcript = self.device_revocation_transcript(approver_device_id, target_device_id)?;
         let approver = self.active_device(approver_device_id)?;
         verify(provider, &approver.binding, &transcript, signature)?;
 
@@ -709,10 +704,7 @@ impl IdentityCore {
         }
     }
 
-    pub fn app_identity_status(
-        &self,
-        app_id: AppId,
-    ) -> Result<AppIdentityStatus, IdentityError> {
+    pub fn app_identity_status(&self, app_id: AppId) -> Result<AppIdentityStatus, IdentityError> {
         self.state
             .apps
             .get(&app_id)
@@ -1040,10 +1032,7 @@ impl IdentityCore {
         builder
     }
 
-    fn require_binding_unused(
-        &self,
-        candidate: &IdentityKeyBinding,
-    ) -> Result<(), IdentityError> {
+    fn require_binding_unused(&self, candidate: &IdentityKeyBinding) -> Result<(), IdentityError> {
         if self.binding_is_in_use(candidate) {
             Err(IdentityError::DuplicateBinding)
         } else {
@@ -1129,11 +1118,8 @@ impl IdentityCore {
             if record.generation.get() == 0 {
                 return Err(IdentityError::CorruptState);
             }
-            validate_binding(
-                &record.binding,
-                IdentityKeyPurpose::DeviceAuthentication,
-            )
-            .map_err(|_| IdentityError::CorruptState)?;
+            validate_binding(&record.binding, IdentityKeyPurpose::DeviceAuthentication)
+                .map_err(|_| IdentityError::CorruptState)?;
             record_unique_binding(&record.binding, &mut key_ids, &mut public_keys)?;
             if record.status == DeviceStatus::Active {
                 active_devices += 1;
@@ -1146,17 +1132,15 @@ impl IdentityCore {
         let mut pending_device_ids = BTreeSet::new();
         for (enrollment_id, pending) in &state.pending_enrollments {
             require_nonzero(enrollment_id.as_bytes()).map_err(|_| IdentityError::CorruptState)?;
-            require_nonzero(pending.device_id.as_bytes()).map_err(|_| IdentityError::CorruptState)?;
+            require_nonzero(pending.device_id.as_bytes())
+                .map_err(|_| IdentityError::CorruptState)?;
             if state.devices.contains_key(&pending.device_id)
                 || !pending_device_ids.insert(pending.device_id)
             {
                 return Err(IdentityError::CorruptState);
             }
-            validate_binding(
-                &pending.binding,
-                IdentityKeyPurpose::DeviceAuthentication,
-            )
-            .map_err(|_| IdentityError::CorruptState)?;
+            validate_binding(&pending.binding, IdentityKeyPurpose::DeviceAuthentication)
+                .map_err(|_| IdentityError::CorruptState)?;
             record_unique_binding(&pending.binding, &mut key_ids, &mut public_keys)?;
         }
 

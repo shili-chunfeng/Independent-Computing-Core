@@ -1,17 +1,13 @@
-use icc_crypto_api::{
-    CryptoProviderV1, Ed25519SigningSeed, Ed25519Signature,
-};
+use icc_crypto_api::{CryptoProviderV1, Ed25519Signature, Ed25519SigningSeed};
 use icc_crypto_rust::RustCryptoProviderV1;
 use icc_error::PlatformError;
 use icc_identity_core::{
-    AppIdentityStatus, AuthorizationTranscript, DeviceStatus, IdentityCore,
-    IdentityError, IdentityKeyBinding, IdentityKeyPurpose, RecoveryAuthority,
-    RecoveryPolicy, MAX_APP_IDENTITIES, MAX_PENDING_ENROLLMENTS,
+    AppIdentityStatus, AuthorizationTranscript, DeviceStatus, IdentityCore, IdentityError,
+    IdentityKeyBinding, IdentityKeyPurpose, MAX_APP_IDENTITIES, MAX_PENDING_ENROLLMENTS,
+    RecoveryAuthority, RecoveryPolicy,
 };
 use icc_platform_api::SecureRandom;
-use icc_types::{
-    AppId, IdentityKeyId, RecoveryAuthorityId,
-};
+use icc_types::{AppId, IdentityKeyId, RecoveryAuthorityId};
 
 const PROVIDER: RustCryptoProviderV1 = RustCryptoProviderV1;
 
@@ -116,11 +112,7 @@ fn bootstrap_rejects_bad_policy_purpose_entropy_and_zero_randomness() {
                 authority(3),
                 RecoveryAuthority::new(
                     authority_id(4),
-                    binding_with_material(
-                        4,
-                        3,
-                        IdentityKeyPurpose::RecoveryAuthorization,
-                    ),
+                    binding_with_material(4, 3, IdentityKeyPurpose::RecoveryAuthorization,),
                 )
                 .unwrap(),
             ],
@@ -521,11 +513,7 @@ fn two_of_three_recovery_rotates_authority_and_contains_old_trust() {
 
     let reactivation_binding = binding(11, IdentityKeyPurpose::AppAuthentication);
     let reactivation = core
-        .app_rotation_transcript(
-            challenge.new_device_id(),
-            app_id,
-            reactivation_binding,
-        )
+        .app_rotation_transcript(challenge.new_device_id(), app_id, reactivation_binding)
         .unwrap();
     let app_after = core
         .rotate_app_identity_key(
@@ -593,7 +581,10 @@ fn recovery_policy_order_is_canonical_and_transcript_actions_are_separated() {
     let prefix = b"ICC/identity-core/authorization/v1\0";
     assert!(rotation.as_bytes().starts_with(prefix));
     assert!(enrollment.as_bytes().starts_with(prefix));
-    assert_ne!(rotation.as_bytes()[prefix.len()], enrollment.as_bytes()[prefix.len()]);
+    assert_ne!(
+        rotation.as_bytes()[prefix.len()],
+        enrollment.as_bytes()[prefix.len()]
+    );
 }
 
 #[test]
