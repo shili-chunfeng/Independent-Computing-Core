@@ -29,29 +29,50 @@ jobs:
       - name: Verify committed locked dependency graph
         run: |
           test -f Cargo.lock
-          cargo metadata --locked --format-version 1 > /tmp/icc-cargo-metadata.json
+          cargo metadata --locked --format-version 1 \
+            > /tmp/icc-cargo-metadata-default.json
+          cargo metadata --locked --all-features --format-version 1 \
+            > /tmp/icc-cargo-metadata-all-features.json
           git diff --exit-code -- Cargo.lock
 
-      - name: Resolved dependency inventory
-        run: python3 scripts/dependency_inventory.py /tmp/icc-cargo-metadata.json
+      - name: Default resolved dependency inventory
+        run: python3 scripts/dependency_inventory.py /tmp/icc-cargo-metadata-default.json
+
+      - name: All-features resolved dependency inventory
+        run: python3 scripts/dependency_inventory.py /tmp/icc-cargo-metadata-all-features.json
 
       - name: Architecture policy self and negative tests
         run: python3 -m unittest discover -s scripts -p 'test_*.py'
 
       - name: Architecture boundary check
-        run: python3 scripts/check_architecture.py
+        run: |
+          python3 scripts/check_architecture.py \
+            --default-metadata /tmp/icc-cargo-metadata-default.json \
+            --all-features-metadata /tmp/icc-cargo-metadata-all-features.json
 
       - name: Formatting
         run: cargo fmt --all -- --check
 
-      - name: Workspace check
+      - name: Default workspace check
         run: cargo check --workspace --locked
 
-      - name: Clippy
+      - name: All-features workspace check
+        run: cargo check --workspace --all-features --locked
+
+      - name: Default clippy
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
 
-      - name: Tests
+      - name: All-features clippy
+        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+
+      - name: Default tests
         run: cargo test --workspace --locked
+
+      - name: Secret trait compile-fail doctests
+        run: cargo test -p icc-crypto-api --doc --locked
+
+      - name: All-features tests
+        run: cargo test --workspace --all-features --locked
 
       - name: Bare-metal no_std portability checks
         run: |
@@ -70,12 +91,17 @@ jobs:
           cargo deny --version
 
       - name: Dependency advisory license source and ban checks
-        run: cargo deny --metadata-path /tmp/icc-cargo-metadata.json check advisories bans licenses sources
+        run: |
+          cargo deny \
+            --metadata-path /tmp/icc-cargo-metadata-all-features.json \
+            check advisories bans licenses sources
 
-      - name: Repeated locked release build and lockfile stability
+      - name: Default and all-features locked release builds and lockfile stability
         run: |
           sha256sum Cargo.lock > /tmp/icc-cargo-lock.sha256
           cargo build --workspace --release --locked
           cargo build --workspace --release --locked
+          cargo build --workspace --release --all-features --locked
+          cargo build --workspace --release --all-features --locked
           sha256sum --check /tmp/icc-cargo-lock.sha256
           git diff --exit-code -- Cargo.lock

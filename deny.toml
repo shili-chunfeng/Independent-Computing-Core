@@ -2,7 +2,7 @@
 # This governs third-party dependencies only; it does not assign a license to ICC.
 
 [graph]
-all-features = false
+all-features = true
 
 [advisories]
 yanked = "deny"
