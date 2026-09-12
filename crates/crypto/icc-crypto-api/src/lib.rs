@@ -7,6 +7,93 @@
 //! It is an internal A1 workspace interface, not an application-facing API.
 //! Secret byte wrappers exist only to connect the future KeyStore/Crypto Service
 //! to vetted provider implementations. They MUST NOT cross IPC or be serialized.
+//!
+//! # Compiler-level secret trait regressions
+//!
+//! Each `compile_fail` block checks exactly one wrapper/trait pair. Keeping the
+//! assertions independent prevents one missing trait from hiding another trait
+//! that was accidentally added. These are compiler-level regression tests, not
+//! formal verification.
+//!
+//! `Ed25519SigningSeed` is not `Clone`:
+//! ```compile_fail
+//! fn assert_trait<T: Clone>() {}
+//! assert_trait::<icc_crypto_api::Ed25519SigningSeed>();
+//! ```
+//! `Ed25519SigningSeed` is not `Copy`:
+//! ```compile_fail
+//! fn assert_trait<T: Copy>() {}
+//! assert_trait::<icc_crypto_api::Ed25519SigningSeed>();
+//! ```
+//! `Ed25519SigningSeed` is not `Debug`:
+//! ```compile_fail
+//! fn assert_trait<T: core::fmt::Debug>() {}
+//! assert_trait::<icc_crypto_api::Ed25519SigningSeed>();
+//! ```
+//!
+//! `X25519Secret` is not `Clone`:
+//! ```compile_fail
+//! fn assert_trait<T: Clone>() {}
+//! assert_trait::<icc_crypto_api::X25519Secret>();
+//! ```
+//! `X25519Secret` is not `Copy`:
+//! ```compile_fail
+//! fn assert_trait<T: Copy>() {}
+//! assert_trait::<icc_crypto_api::X25519Secret>();
+//! ```
+//! `X25519Secret` is not `Debug`:
+//! ```compile_fail
+//! fn assert_trait<T: core::fmt::Debug>() {}
+//! assert_trait::<icc_crypto_api::X25519Secret>();
+//! ```
+//!
+//! `SharedSecret32` is not `Clone`:
+//! ```compile_fail
+//! fn assert_trait<T: Clone>() {}
+//! assert_trait::<icc_crypto_api::SharedSecret32>();
+//! ```
+//! `SharedSecret32` is not `Copy`:
+//! ```compile_fail
+//! fn assert_trait<T: Copy>() {}
+//! assert_trait::<icc_crypto_api::SharedSecret32>();
+//! ```
+//! `SharedSecret32` is not `Debug`:
+//! ```compile_fail
+//! fn assert_trait<T: core::fmt::Debug>() {}
+//! assert_trait::<icc_crypto_api::SharedSecret32>();
+//! ```
+//!
+//! `AeadKey32` is not `Clone`:
+//! ```compile_fail
+//! fn assert_trait<T: Clone>() {}
+//! assert_trait::<icc_crypto_api::AeadKey32>();
+//! ```
+//! `AeadKey32` is not `Copy`:
+//! ```compile_fail
+//! fn assert_trait<T: Copy>() {}
+//! assert_trait::<icc_crypto_api::AeadKey32>();
+//! ```
+//! `AeadKey32` is not `Debug`:
+//! ```compile_fail
+//! fn assert_trait<T: core::fmt::Debug>() {}
+//! assert_trait::<icc_crypto_api::AeadKey32>();
+//! ```
+//!
+//! `DerivedKey32` is not `Clone`:
+//! ```compile_fail
+//! fn assert_trait<T: Clone>() {}
+//! assert_trait::<icc_crypto_api::DerivedKey32>();
+//! ```
+//! `DerivedKey32` is not `Copy`:
+//! ```compile_fail
+//! fn assert_trait<T: Copy>() {}
+//! assert_trait::<icc_crypto_api::DerivedKey32>();
+//! ```
+//! `DerivedKey32` is not `Debug`:
+//! ```compile_fail
+//! fn assert_trait<T: core::fmt::Debug>() {}
+//! assert_trait::<icc_crypto_api::DerivedKey32>();
+//! ```
 
 extern crate alloc;
 
