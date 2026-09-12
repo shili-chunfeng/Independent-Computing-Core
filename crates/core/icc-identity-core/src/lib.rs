@@ -1046,18 +1046,15 @@ impl IdentityCore {
     }
 
     fn binding_is_reserved(&self, candidate: &IdentityKeyBinding) -> bool {
-        self.state
-            .recovery_attempt
-            .as_ref()
-            .is_some_and(|attempt| {
-                bindings_overlap(candidate, &attempt.new_root)
-                    || bindings_overlap(candidate, &attempt.new_device)
-                    || attempt
-                        .target_policy
-                        .authorities
-                        .iter()
-                        .any(|authority| bindings_overlap(candidate, &authority.binding))
-            })
+        self.state.recovery_attempt.as_ref().is_some_and(|attempt| {
+            bindings_overlap(candidate, &attempt.new_root)
+                || bindings_overlap(candidate, &attempt.new_device)
+                || attempt
+                    .target_policy
+                    .authorities
+                    .iter()
+                    .any(|authority| bindings_overlap(candidate, &authority.binding))
+        })
     }
 
     fn binding_is_in_use(&self, candidate: &IdentityKeyBinding) -> bool {
