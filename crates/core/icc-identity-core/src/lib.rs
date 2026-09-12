@@ -515,6 +515,11 @@ impl IdentityCore {
                     .pending_enrollments
                     .values()
                     .any(|pending| pending.device_id == candidate)
+                || self
+                    .state
+                    .recovery_attempt
+                    .as_ref()
+                    .is_some_and(|attempt| attempt.new_device_id == candidate)
         })?);
 
         self.state
@@ -1033,11 +1038,26 @@ impl IdentityCore {
     }
 
     fn require_binding_unused(&self, candidate: &IdentityKeyBinding) -> Result<(), IdentityError> {
-        if self.binding_is_in_use(candidate) {
+        if self.binding_is_in_use(candidate) || self.binding_is_reserved(candidate) {
             Err(IdentityError::DuplicateBinding)
         } else {
             Ok(())
         }
+    }
+
+    fn binding_is_reserved(&self, candidate: &IdentityKeyBinding) -> bool {
+        self.state
+            .recovery_attempt
+            .as_ref()
+            .is_some_and(|attempt| {
+                bindings_overlap(candidate, &attempt.new_root)
+                    || bindings_overlap(candidate, &attempt.new_device)
+                    || attempt
+                        .target_policy
+                        .authorities
+                        .iter()
+                        .any(|authority| bindings_overlap(candidate, &authority.binding))
+            })
     }
 
     fn binding_is_in_use(&self, candidate: &IdentityKeyBinding) -> bool {
@@ -1125,7 +1145,7 @@ impl IdentityCore {
                 active_devices += 1;
             }
         }
-        if active_devices == 0 {
+        if active_devices == 0 || active_devices >= MAX_DEVICE_RECORDS {
             return Err(IdentityError::CorruptState);
         }
 

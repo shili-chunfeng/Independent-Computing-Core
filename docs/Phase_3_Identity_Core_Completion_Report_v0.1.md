@@ -270,7 +270,9 @@ Phase 3-specific evidence in run #99:
 - recovery policy canonical ordering and transcript action separation;
 - App and pending-enrollment capacity boundaries;
 - entropy-unavailable and repeated-zero random-ID failure;
-- wrong-purpose and invalid/duplicate recovery-policy rejection.
+- wrong-purpose and invalid/duplicate recovery-policy rejection;
+- recovery-target reuse of an existing App key and post-begin reuse of a
+  recovery-reserved future root key are rejected without consuming the attempt.
 
 Repository-wide evidence also passed:
 

@@ -182,6 +182,31 @@ fn app_identities_are_pairwise_distinct_and_terminal_revocation_is_enforced() {
     assert_eq!(
         core.create_app_identity(
             &mut random,
+            app_a,
+            binding(12, IdentityKeyPurpose::AppAuthentication),
+        ),
+        Err(IdentityError::AlreadyExists)
+    );
+    assert_eq!(
+        core.create_app_identity(
+            &mut random,
+            AppId::from_bytes([0; 16]),
+            binding(12, IdentityKeyPurpose::AppAuthentication),
+        ),
+        Err(IdentityError::InvalidInput)
+    );
+    assert_eq!(
+        core.create_app_identity(
+            &mut random,
+            AppId::from_bytes([0xC3; 16]),
+            binding(13, IdentityKeyPurpose::DeviceAuthentication),
+        ),
+        Err(IdentityError::InvalidKeyPurpose)
+    );
+
+    assert_eq!(
+        core.create_app_identity(
+            &mut random,
             AppId::from_bytes([0xC3; 16]),
             binding_with_material(12, 10, IdentityKeyPurpose::AppAuthentication),
         ),
@@ -396,6 +421,28 @@ fn two_of_three_recovery_rotates_authority_and_contains_old_trust() {
         )
         .unwrap();
 
+    let reused_app_key_policy = RecoveryPolicy::new(
+        2,
+        vec![
+            RecoveryAuthority::new(
+                authority_id(60),
+                binding_with_material(60, 10, IdentityKeyPurpose::RecoveryAuthorization),
+            )
+            .unwrap(),
+            authority(61),
+        ],
+    )
+    .unwrap();
+    assert!(matches!(
+        core.begin_recovery(
+            &mut random,
+            binding(50, IdentityKeyPurpose::RootAuthorization),
+            binding(51, IdentityKeyPurpose::DeviceAuthentication),
+            reused_app_key_policy,
+        ),
+        Err(IdentityError::DuplicateBinding)
+    ));
+
     let target_policy = core.recovery_policy().clone();
     let challenge = core
         .begin_recovery(
@@ -405,6 +452,14 @@ fn two_of_three_recovery_rotates_authority_and_contains_old_trust() {
             target_policy,
         )
         .unwrap();
+    assert_eq!(
+        core.create_app_identity(
+            &mut random,
+            AppId::from_bytes([0xB2; 16]),
+            binding_with_material(60, 50, IdentityKeyPurpose::AppAuthentication),
+        ),
+        Err(IdentityError::DuplicateBinding)
+    );
     let first_transcript = core
         .recovery_transcript(challenge.attempt_id(), authority_id(3))
         .unwrap();
