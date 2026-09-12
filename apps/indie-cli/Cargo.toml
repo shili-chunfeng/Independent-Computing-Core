@@ -7,7 +7,6 @@ publish.workspace = true
 
 [dependencies]
 icc-capability-core = { path = "../../crates/core/icc-capability-core" }
-icc-identity-core = { path = "../../crates/core/icc-identity-core" }
 icc-platform-api = { path = "../../crates/ports/icc-platform-api" }
 icc-platform-linux = { path = "../../crates/platform/linux/icc-platform-linux" }
 icc-rights = { path = "../../crates/core/icc-rights" }
