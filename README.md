@@ -4,6 +4,22 @@ Independent Computing Core (ICC) is a portable personal-computing core intended 
 
 The repository currently contains the Phase 0 architecture/security baselines, Phase 1 engineering skeleton, and Phase 2 ClassicalV1 cryptographic foundation. **Phase 3 has not started.**
 
+## Mandatory project execution contract
+
+Before planning or implementing the next milestone, **every AI agent and engineer must read `docs/PROJECT_EXECUTION_CONTRACT.md` together with the current `main` source tree and the higher-priority Constitution / Threat Model / Architecture / accepted ADRs**.
+
+That contract defines:
+
+- the final product and system that ICC is intended to become;
+- the mandatory Core and Minimal-OS development tracks;
+- the deterministic algorithm for deciding the next unfinished milestone from merged `main` evidence;
+- the required scope, non-scope, security evidence and exit gates for each future Phase;
+- the branch / CI / PR workflow;
+- the rule that an AI should normally continue autonomously through implementation and CI repair instead of asking the owner what to build next;
+- the stop condition: **open a reviewed-ready PR with the latest PR-head CI green, then stop — never merge automatically**.
+
+An unmerged branch or PR is not a completed milestone. The next milestone begins only after the preceding required PR has been manually reviewed and merged into `main`.
+
 ## Architecture baseline
 
 - Domain/Core crates are `no_std` where required by Phase 0.3.
@@ -116,6 +132,7 @@ The CLI deliberately does not depend directly on the internal crypto API/provide
 
 ## Security and design documents
 
+- `docs/PROJECT_EXECUTION_CONTRACT.md` — mandatory master product roadmap and AI development/merge contract
 - `SECURITY.md`
 - `docs/Phase_0_System_Constitution_v0.1.md`
 - `docs/Phase_0.2_Threat_Model_v0.1.md` (index to hash-verified split parts)
