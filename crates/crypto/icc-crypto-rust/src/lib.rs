@@ -174,6 +174,21 @@ mod tests {
     }
 
     #[test]
+    fn sha256_empty_input_matches_known_answer() {
+        let provider = RustCryptoProviderV1;
+        assert_eq!(
+            provider.sha256(b"").to_bytes(),
+            hex::<32>("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
+        );
+    }
+
+    #[test]
+    fn sha256_input_mutation_changes_digest() {
+        let provider = RustCryptoProviderV1;
+        assert_ne!(provider.sha256(b"abc"), provider.sha256(b"abd"));
+    }
+
+    #[test]
     fn hkdf_sha256_rfc5869_case1_matches_first_32_okm_octets() {
         let provider = RustCryptoProviderV1;
         let ikm = [0x0b_u8; 22];
