@@ -11,9 +11,13 @@ The repository currently contains the Phase 0 architecture/security baselines, P
 - Linux-specific code is isolated in Linux adapters.
 - Domain Core does not directly depend on crypto-provider implementation crates.
 - Local authorization remains authority-side; UI/CLI is not a security authority.
+- Every workspace package has a fail-closed allowlist for all direct dependency declarations, including optional, dev, build, target-specific, path, registry, and renamed declarations.
+- The policy validates the declared version requirement, source/path identity, default-feature setting, and requested features independently of whether Cargo activates the edge.
+- Default and all-features locked graphs are checked separately; the all-features feature union must match the reviewed Phase 2 crypto feature policy.
 - The current repository dependency policy rejects direct production App dependencies on `icc-crypto-api` and `icc-crypto-rust`.
 - Secret wrapper identifiers are additionally guarded by conservative source checks outside the crypto boundary.
-- These repository/CI checks are not Rust visibility guarantees, runtime sandboxing, or formal proofs.
+- Fifteen independent `compile_fail` doctests provide compiler-level regression evidence that each of the five secret wrappers implements none of `Clone`, `Copy`, or `Debug`.
+- Source-pattern checks do not expand arbitrary macros and are not Rust AST, compiler, visibility, runtime-sandbox, or formal proofs. The compile-fail tests are compiler checks, but not formal verification.
 - Production dependency resolution is committed in the root `Cargo.lock`.
 
 ## Toolchain
@@ -51,19 +55,29 @@ cargo --version
 
 # Committed locked dependency graph
 test -f Cargo.lock
-cargo metadata --locked --format-version 1 > /tmp/icc-cargo-metadata.json
+cargo metadata --locked --format-version 1 \
+  > /tmp/icc-cargo-metadata-default.json
+cargo metadata --locked --all-features --format-version 1 \
+  > /tmp/icc-cargo-metadata-all-features.json
 git diff --exit-code -- Cargo.lock
 
-# Resolved dependency inventory and architecture policy tests
-python3 scripts/dependency_inventory.py /tmp/icc-cargo-metadata.json
+# Default/all-features inventory and architecture policy tests
+python3 scripts/dependency_inventory.py /tmp/icc-cargo-metadata-default.json
+python3 scripts/dependency_inventory.py /tmp/icc-cargo-metadata-all-features.json
 python3 -m unittest discover -s scripts -p 'test_*.py'
-python3 scripts/check_architecture.py
+python3 scripts/check_architecture.py \
+  --default-metadata /tmp/icc-cargo-metadata-default.json \
+  --all-features-metadata /tmp/icc-cargo-metadata-all-features.json
 
 # Rust checks
 cargo fmt --all -- --check
 cargo check --workspace --locked
+cargo check --workspace --all-features --locked
 cargo clippy --workspace --all-targets --locked -- -D warnings
+cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 cargo test --workspace --locked
+cargo test -p icc-crypto-api --doc --locked
+cargo test --workspace --all-features --locked
 
 # Bare-metal no_std portability checks
 cargo check -p icc-types --target thumbv7em-none-eabi --no-default-features --locked
@@ -77,12 +91,16 @@ cargo check -p icc-crypto-rust --target thumbv7em-none-eabi --no-default-feature
 
 # Dependency policy tool; CI pins the exact version and uses the tool package lockfile
 cargo install --locked --version 0.20.2 cargo-deny
-cargo deny --metadata-path /tmp/icc-cargo-metadata.json check advisories bans licenses sources
+cargo deny \
+  --metadata-path /tmp/icc-cargo-metadata-all-features.json \
+  check advisories bans licenses sources
 
 # Repeated locked release build and lockfile stability
 sha256sum Cargo.lock > /tmp/icc-cargo-lock.sha256
 cargo build --workspace --release --locked
 cargo build --workspace --release --locked
+cargo build --workspace --release --all-features --locked
+cargo build --workspace --release --all-features --locked
 sha256sum --check /tmp/icc-cargo-lock.sha256
 git diff --exit-code -- Cargo.lock
 ```

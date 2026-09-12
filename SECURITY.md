@@ -45,6 +45,7 @@ Security-critical rules include:
 - Do not reuse a ChaCha20-Poly1305 nonce with the same key.
 - Do not expose raw private keys/seeds through Apps or ordinary Domain Core APIs.
 - Secret wrapper types are internal crypto-boundary implementation types, not wire/persistent/App types.
+- Each of the five secret wrappers has independent compiler-level `compile_fail` regressions for `Clone`, `Copy`, and `Debug`; these tests are regression evidence, not formal verification.
 - `zeroize` is best-effort cleanup of owned storage; it is not a guarantee against hostile-kernel memory extraction, compiler-created copies, side channels, or physical attacks.
 - Any new cryptographic profile/algorithm requires explicit architecture review and migration/downgrade analysis.
 
@@ -55,10 +56,13 @@ Security-critical rules include:
 - Domain Core must not directly depend on provider implementation crates.
 - The current per-package repository policy rejects direct production App dependencies on `icc-crypto-api` and `icc-crypto-rust`.
 - `icc-identity-core -> icc-platform-api` is an explicit reviewed Phase 1 Port dependency-inversion edge; it does not authorize a general L2-to-Port dependency rule.
-- New, unclassified workspace packages and unreviewed direct external dependencies fail the architecture policy check.
+- Every non-root Cargo package manifest in the repository must name a formal workspace member. New or unclassified packages fail closed.
+- Every workspace package has a complete allowlist for normal, dev, build, target-specific, optional, path, registry, and renamed direct dependency declarations. The checker validates actual package identity, local alias, kind, target condition, optional flag, source/path, exact version requirement, default-feature setting, and requested features even when the dependency is inactive.
+- The reviewed external production dependencies require literal exact manifest pins (`=version`). A compatible Cargo resolution under a broader requirement is not accepted.
 - Production dependency resolution is committed in `Cargo.lock` and CI uses `--locked`.
-- CI checks the current locked graph for advisories, license policy, source policy, banned crates/features, architecture boundaries, architecture negative fixtures, standards-based tests, and a bare-metal `thumbv7em-none-eabi` compile target.
-- Secret-trait/source checks are conservative text/source analysis. They do not establish Rust visibility, prevent arbitrary runtime code execution, provide a sandbox, or constitute compiler/AST/formal proof.
+- CI keeps separate default and `--all-features` Cargo metadata. The default graph remains build/inventory evidence; the all-features graph is additionally checked for the reviewed direct feature union and is supplied to cargo-deny so inactive optional dependencies are not omitted by default.
+- CI checks both default and all-features workspaces, the current locked graphs, advisories, license policy, source policy, banned crates/features, architecture boundaries, architecture negative fixtures, standards-based tests, and a bare-metal `thumbv7em-none-eabi` compile target.
+- Secret-trait/source checks are conservative source-pattern analysis and do not expand arbitrary macros. They are not a Rust parser or AST, compiler proof, visibility proof, runtime sandbox, or formal proof. Separate compile-fail doctests provide compiler-level evidence only for the current `Clone`, `Copy`, and `Debug` regressions.
 - Dependency and advisory checks are time-bounded evidence, not proof that dependencies have no vulnerabilities, unsafe code, or future maintenance risk.
 
 ## Vulnerability reporting

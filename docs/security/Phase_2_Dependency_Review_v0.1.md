@@ -1,10 +1,15 @@
 # Independent Computing Core
 ## Phase 2 — Dependency Security Review v0.1
 
-**Review date:** 2026-09-11  
-**Scope:** Phase 2 locked production/workspace dependency graph  
-**Base branch:** `main` at `1289214008c0e0c58cef340b322aa5d50131937e`  
-**Hardening branch evidence:** GitHub Actions `phase2-ci` run #65, commit `4fed67d332d656b6c788ef87a8e3a19736c3d380`
+**Review date:** 2026-09-11
+
+**Scope:** Phase 2 dependency declarations plus default and all-features locked workspace graphs
+
+**Base branch:** `main` at `1289214008c0e0c58cef340b322aa5d50131937e`
+
+**Historical first-round evidence:** GitHub Actions `phase2-ci` run #65, commit `4fed67d332d656b6c788ef87a8e3a19736c3d380`
+
+**Second-round starting evidence:** PR #1 run #84, commit `787400abb50b308f4edc0ae12e45879fb8f88e38`
 
 ---
 
@@ -12,7 +17,13 @@
 
 This review addresses Phase 0.3 §§44–50, 79–81 and 88, Phase 2 §32, and Threat `T-PKG-007`.
 
-The repository now commits a root `Cargo.lock` and resolves the graph using Rust/Cargo 1.98.1 with `cargo metadata --locked`. CI fails if the lockfile is missing, cannot resolve with `--locked`, or changes during repeated locked release builds.
+The repository commits a root `Cargo.lock` and resolves both the default and all-features graphs using Rust/Cargo 1.98.1. CI fails if the lockfile is missing, either graph cannot resolve with `--locked`, or the lockfile changes during repeated default or all-features locked release builds.
+
+The review treats three evidence layers separately:
+
+- `packages[].dependencies`: every direct manifest declaration, including inactive optional, dev, build, target-specific, renamed, path, and registry dependencies;
+- default `resolve.nodes[].deps`: the normal locked build/inventory graph;
+- all-features `resolve.nodes[].deps` and node feature union: optional-edge, feature-policy, and cargo-deny audit evidence.
 
 This document does **not** claim that dependency source code has been exhaustively audited. In particular, upstream unsafe-code footprint is marked `NOT VERIFIED` unless there is direct evidence in this review. `cargo-deny` advisory/license/source results are not treated as an unsafe-code audit.
 
@@ -24,11 +35,12 @@ The review uses:
 
 - Rust 1.98.1 / Cargo 1.98.1 from the repository `rust-toolchain.toml`.
 - `Cargo.lock` format v4 committed in the repository.
-- `cargo metadata --locked --format-version 1` for exact versions, source, declared license expression, target kinds, and resolved features.
+- `cargo metadata --locked --format-version 1` for the default locked graph and workspace declaration records.
+- `cargo metadata --locked --all-features --format-version 1` for optional edges and the all-features resolved feature union.
 - `scripts/dependency_inventory.py` to render Cargo metadata without inventing missing facts.
 - `cargo-deny 0.20.2`, installed with `cargo install --locked --version 0.20.2 cargo-deny`.
 - `deny.toml` for advisory, license, source, duplicate/wildcard, banned crate, and banned feature policy.
-- GitHub Actions run #65: `advisories ok, bans ok, licenses ok, sources ok`.
+- Historical GitHub Actions run #65: `advisories ok, bans ok, licenses ok, sources ok` for the then-audited graph. Final second-round run evidence is kept in PR #1 so this document does not require a self-referential evidence commit.
 - Rust bare-metal target `thumbv7em-none-eabi` to validate the selected portable dependency configuration for L0/L1/L2 and crypto portable crates.
 
 Authoritative upstream references used for direct dependencies include the published crate metadata/docs and upstream project repositories. `cargo-deny 0.20.2` identifies itself as actively developed, MIT OR Apache-2.0, with Rust 1.88 minimum in its upstream `Cargo.toml`.
@@ -39,25 +51,29 @@ Authoritative upstream references used for direct dependencies include the publi
 
 ---
 
-## 3. Direct dependencies
+## 3. Direct dependency declarations
 
-| Dependency | Exact version | Purpose / necessity | Upstream / source | License | build.rs / proc macro | Default features / actual enabled features | no_std compatibility | Maintenance status | Unsafe footprint | Supply-chain risk | Replaceability / production TCB |
+Every reviewed declaration uses a literal exact requirement. The checker rejects semver-compatible forms such as `3.0.0`, `^3.0.0`, `>=3.0.0`, or `*` even when the current lockfile still resolves to the reviewed package version. It also requires the exact `default-features` and requested-feature values shown below. `getrandom` retains its previously reviewed implicit/default-enabled declaration semantics; that setting was not changed in this review.
+
+| Dependency | Exact manifest requirement | Purpose / necessity | Upstream / source | License | build.rs / proc macro | Declared default/features; reviewed resolved features | no_std compatibility | Maintenance status | Unsafe footprint | Supply-chain risk | Replaceability / production TCB |
 |---|---:|---|---|---|---|---|---|---|---|---|---|
-| `sha2` | 0.11.0 | SHA-256 implementation for ClassicalV1 and HKDF hash | RustCrypto/hashes; crates.io | MIT OR Apache-2.0 | no / no | defaults disabled; actual `(none)` | **VERIFIED for selected configuration** by `icc-crypto-rust` on `thumbv7em-none-eabi` | Recent 0.11.0 release observed in 2026; active upstream project | **NOT VERIFIED** | High: cryptographic primitive in provider TCB | Replaceable only behind provider/API and protocol migration rules; runtime crypto TCB |
-| `hkdf` | 0.13.0 | RFC 5869 HKDF orchestration using SHA-256 | RustCrypto/KDFs; crates.io | MIT OR Apache-2.0 | no / no | defaults disabled; actual `(none)` | **VERIFIED for selected configuration** | Recent 0.13.0 release observed in 2026; active upstream project | **NOT VERIFIED** | High: key-derivation primitive path | Provider-replaceable subject to protocol compatibility; runtime crypto TCB |
-| `ed25519-dalek` | 3.0.0 | Ed25519 signing and strict verification | dalek-cryptography/curve25519-dalek; crates.io | BSD-3-Clause | no / no | defaults disabled; actual `zeroize`; `hazmat`/`legacy_compatibility` forbidden | **VERIFIED for selected configuration** | 3.0.0 published in 2026; upstream actively maintained | **NOT VERIFIED** | High: signature primitive and key material handling | Provider-replaceable with explicit migration; runtime crypto TCB |
-| `x25519-dalek` | 3.0.0 | X25519 key agreement and contributory check | dalek-cryptography/x25519-dalek; crates.io | BSD-3-Clause | no / no | defaults disabled; actual `static_secrets, zeroize` | **VERIFIED for selected configuration** | 3.0.0 published in 2026; upstream active | **NOT VERIFIED** | High: key-agreement primitive and secret material | Provider-replaceable with protocol migration; runtime crypto TCB |
-| `chacha20poly1305` | 0.11.0 | RFC 8439 AEAD | RustCrypto/AEADs; crates.io | Apache-2.0 OR MIT | no / no | defaults disabled; actual `alloc, zeroize` | **VERIFIED for selected configuration** | 0.11.0 published in 2026; upstream active | **NOT VERIFIED** | High: AEAD primitive | Provider-replaceable with profile migration; runtime crypto TCB |
-| `zeroize` | 1.9.0 | Best-effort destruction of typed secret wrapper storage | RustCrypto/utils; crates.io | Apache-2.0 OR MIT | no / no | defaults disabled in ICC; actual `(none)` | **VERIFIED** through `icc-crypto-api` bare-metal check | 1.9.0 published in 2026; upstream active | Upstream implementation details not independently audited: **NOT VERIFIED** | High: secret cleanup semantics; does not guarantee removal of compiler-created copies or hostile-kernel memory extraction | Directly coupled to secret wrapper implementation; crypto API TCB |
-| `getrandom` | 0.4.3 | Linux/platform CSPRNG adapter | rust-random/getrandom; crates.io | MIT OR Apache-2.0 | yes / no | default features not explicitly disabled; resolved feature set `(none)` | **N/A to portable Core**; Linux adapter intentionally excluded from bare-metal gate | 0.4.3 published in 2026; upstream active | **NOT VERIFIED** | High: entropy source and OS FFI path | Replaceable via `SecureRandom` Port; Linux platform TCB only |
+| `sha2` | `=0.11.0` | SHA-256 implementation for ClassicalV1 and HKDF hash | RustCrypto/hashes; crates.io | MIT OR Apache-2.0 | no / no | false / `[]`; resolved `(none)` | **VERIFIED for selected configuration** by `icc-crypto-rust` on `thumbv7em-none-eabi` | Recent 0.11.0 release observed in 2026; active upstream project | **NOT VERIFIED** | High: cryptographic primitive in provider TCB | Replaceable only behind provider/API and protocol migration rules; runtime crypto TCB |
+| `hkdf` | `=0.13.0` | RFC 5869 HKDF orchestration using SHA-256 | RustCrypto/KDFs; crates.io | MIT OR Apache-2.0 | no / no | false / `[]`; resolved `(none)` | **VERIFIED for selected configuration** | Recent 0.13.0 release observed in 2026; active upstream project | **NOT VERIFIED** | High: key-derivation primitive path | Provider-replaceable subject to protocol compatibility; runtime crypto TCB |
+| `ed25519-dalek` | `=3.0.0` | Ed25519 signing and strict verification | dalek-cryptography/curve25519-dalek; crates.io | BSD-3-Clause | no / no | false / `[zeroize]`; resolved `zeroize`; `serde`, `hazmat`, and `legacy_compatibility` forbidden | **VERIFIED for selected configuration** | 3.0.0 published in 2026; upstream actively maintained | **NOT VERIFIED** | High: signature primitive and key material handling | Provider-replaceable with explicit migration; runtime crypto TCB |
+| `x25519-dalek` | `=3.0.0` | X25519 key agreement and contributory check | dalek-cryptography/x25519-dalek; crates.io | BSD-3-Clause | no / no | false / `[static_secrets, zeroize]`; resolved same | **VERIFIED for selected configuration** | 3.0.0 published in 2026; upstream active | **NOT VERIFIED** | High: key-agreement primitive and secret material | Provider-replaceable with protocol migration; runtime crypto TCB |
+| `chacha20poly1305` | `=0.11.0` | RFC 8439 AEAD | RustCrypto/AEADs; crates.io | Apache-2.0 OR MIT | no / no | false / `[alloc, zeroize]`; resolved same; `getrandom` and all other extra features forbidden | **VERIFIED for selected configuration** | 0.11.0 published in 2026; upstream active | **NOT VERIFIED** | High: AEAD primitive | Provider-replaceable with profile migration; runtime crypto TCB |
+| `zeroize` | `=1.9.0` | Best-effort destruction of typed secret wrapper storage | RustCrypto/utils; crates.io | Apache-2.0 OR MIT | no / no | false / `[]`; resolved `(none)` | **VERIFIED** through `icc-crypto-api` bare-metal check | 1.9.0 published in 2026; upstream active | Upstream implementation details not independently audited: **NOT VERIFIED** | High: secret cleanup semantics; does not guarantee removal of compiler-created copies or hostile-kernel memory extraction | Directly coupled to secret wrapper implementation; crypto API TCB |
+| `getrandom` | `=0.4.3` | Linux/platform CSPRNG adapter | rust-random/getrandom; crates.io | MIT OR Apache-2.0 | yes / no | true / `[]`; reviewed resolved `(none)` | **N/A to portable Core**; Linux adapter intentionally excluded from bare-metal gate | 0.4.3 published in 2026; upstream active | **NOT VERIFIED** | High: entropy source and OS FFI path | Replaceable via `SecureRandom` Port; Linux platform TCB only |
 
 No direct production dependency version was changed by this hardening task.
 
 ---
 
-## 4. Complete locked third-party graph
+## 4. Complete locked third-party graphs
 
-Facts below come from the actual `cargo metadata --locked` output in CI run #65. `Default active` means the resolved feature list explicitly includes a feature named `default`; it does not infer the crate's declared default set when that feature is absent.
+The table below is the historical default resolved inventory from the actual `cargo metadata --locked` output in CI run #65. It is not a substitute for the declaration allowlist and must not be presented as covering inactive optional declarations. `Default active` means the resolved feature list explicitly includes a feature named `default`; it does not infer the crate's declared default set when that feature is absent.
+
+Second-round CI produces a separate all-features metadata artifact. The architecture checker validates the all-features direct edges and exact reviewed feature union, while cargo-deny consumes that all-features metadata. Because the final run necessarily follows the commit containing this text, its exact inventory and result are recorded in PR #1 rather than retroactively described here as already verified.
 
 For every row:
 
@@ -127,6 +143,8 @@ For every row:
 - `openssl`, `openssl-sys`, `reqwest`, `rusqlite`, and `tokio` denied because they are outside the Phase 2 dependency boundary.
 - third-party license expressions must be satisfiable by the documented dependency allow-policy.
 
+`[graph] all-features = true` makes ordinary local cargo-deny evaluation include optional dependencies by default. Formal CI also passes `/tmp/icc-cargo-metadata-all-features.json` explicitly, so the security audit does not depend on an invocation default.
+
 The license allow-policy is **not** a project license decision. The ICC workspace remains private/non-published Cargo packages with no owner-approved repository `LICENSE`. Selecting the ICC project license remains an owner decision and is recorded as a Remaining Risk.
 
 ### Current evidence
@@ -137,7 +155,7 @@ GitHub Actions run #65 on 2026-09-11 reported:
 advisories ok, bans ok, licenses ok, sources ok
 ```
 
-This proves only the policy result for the locked graph and advisory database available to that run.
+This proves only the historical default-graph policy result and advisory database available to that run. The final second-round all-features result is reported separately in PR #1.
 
 ---
 
@@ -166,6 +184,8 @@ The production App/CLI boundary no longer imports or constructs ICC secret wrapp
 
 Secret wrappers still use `zeroize` on their owned wrapper storage. This review does **not** claim that zeroization removes every compiler-created copy, register value, stack spill, allocator copy, kernel snapshot, swap copy, crash dump, or physical-memory remanence. Provider implementation code can create temporary internal values while adapting to third-party APIs; exhaustive residual-copy analysis is **NOT VERIFIED**.
 
+The dependency declaration policy blocks adding serde features or dependencies outside the reviewed allowlists, and the full crypto-API source-pattern scan looks for recognizable `Serialize`/`Deserialize` implementations. Fifteen independent compile-fail doctests provide compiler-level regression evidence that the five current secret wrappers implement none of `Clone`, `Copy`, or `Debug`. The source checker does not expand arbitrary macros and is not an AST/parser, compiler proof, visibility proof, runtime sandbox, or formal verification; the doctests are compiler-level tests only for those three traits.
+
 Linux root/kernel compromise, memory extraction, and microarchitectural/physical side channels remain outside the Phase 2 prototype guarantee.
 
 ---
@@ -180,6 +200,8 @@ Linux root/kernel compromise, memory extraction, and microarchitectural/physical
 6. **Hardware-backed key isolation:** intentionally not implemented in Phase 2; belongs to later KeyStore/hardware phases.
 7. **Side-channel resistance:** not established by these tests.
 8. **Formal verification:** not performed.
+9. **Host root/kernel:** confidentiality and integrity after a root-equivalent or kernel compromise are outside the prototype claim.
+10. **Branch protection:** `main` has no enforced branch-protection rule/ruleset at this review; owner action remains required.
 
 ---
 
