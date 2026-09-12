@@ -1,6 +1,7 @@
 # Security Baseline
 
-Independent Computing Core is currently a **Phase 2 architecture/security prototype**, not a production security product.
+Independent Computing Core is currently a **Phase 3 architecture/security
+prototype**, not a production security product.
 
 The security model is defined primarily by:
 
@@ -9,6 +10,7 @@ The security model is defined primarily by:
 - `docs/Phase_0.3_Architecture_Boundaries_and_Dependency_Rules_v0.1.md` and its hash-verified split parts
 - `docs/Phase_2_Cryptographic_Foundation_v0.1.md`
 - `docs/security/Phase_2_Dependency_Review_v0.1.md`
+- `docs/Phase_3_Identity_Core_v0.1.md`
 
 ## Explicit prototype limits
 
@@ -49,13 +51,42 @@ Security-critical rules include:
 - `zeroize` is best-effort cleanup of owned storage; it is not a guarantee against hostile-kernel memory extraction, compiler-created copies, side channels, or physical attacks.
 - Any new cryptographic profile/algorithm requires explicit architecture review and migration/downgrade analysis.
 
+## Phase 3 identity rules and limits
+
+- Root-domain identifiers and root/recovery key references are authority state.
+  They must not enter normal App views or CLI output.
+- App identity is pairwise: each App has an independently random pseudonym and
+  a distinct App-purpose public-key binding. Reuse of key IDs or public keys
+  across identity purposes/Apps is rejected.
+- Security transitions are authorized by signatures over the state machine's
+  exact versioned transcript. A caller-supplied role, name, or boolean is not
+  authority.
+- Revoked devices and stale-generation proofs fail closed. Device self-revocation
+  is denied; a different active device or the recovery ceremony is required.
+- Recovery requires at least two distinct current authorities. Success rotates
+  root authority, revokes old devices, clears pending enrollments, and suspends
+  active App identities.
+- Collections and random-ID collision retries are explicitly bounded. Resource
+  exhaustion and entropy failure deny the transition without weakening policy.
+- Identity Core holds public verification values and stable key IDs only. The
+  future Phase 4 KeyStore must bind those IDs to non-exported operations.
+- The movable `IdentityState` is not a persistent/wire format. Phase 3 has no
+  authenticated atomic storage, durable corruption recovery, freshness, or
+  snapshot-rollback defense; those properties are **NOT VERIFIED**.
+- Future service/runtime code must bind the real caller/App/device authority-side.
+  Direct access to `IdentityCore` is not an App API.
+
 ## Architecture and supply-chain rules
 
 - L0/L1/L2 portable crates must preserve the Phase 0.3 dependency direction and `no_std` contract.
 - Linux-specific APIs remain in platform adapters.
 - Domain Core must not directly depend on provider implementation crates.
-- The current per-package repository policy rejects direct production App dependencies on `icc-crypto-api` and `icc-crypto-rust`.
+- The per-package repository policy rejects direct production App dependencies
+  on `icc-identity-core`, `icc-crypto-api`, and `icc-crypto-rust`.
 - `icc-identity-core -> icc-platform-api` is an explicit reviewed Phase 1 Port dependency-inversion edge; it does not authorize a general L2-to-Port dependency rule.
+- `icc-identity-core -> icc-crypto-api` is the reviewed Phase 3 provider-neutral
+  signature-verification edge; a Domain-Core dependency on `icc-crypto-rust`
+  remains forbidden.
 - Every non-root Cargo package manifest in the repository must name a formal workspace member. New or unclassified packages fail closed.
 - Every workspace package has a complete allowlist for normal, dev, build, target-specific, optional, path, registry, and renamed direct dependency declarations. The checker validates actual package identity, local alias, kind, target condition, optional flag, source/path, exact version requirement, default-feature setting, and requested features even when the dependency is inactive.
 - The reviewed external production dependencies require literal exact manifest pins (`=version`). A compatible Cargo resolution under a broader requirement is not accepted.
@@ -75,7 +106,9 @@ Until the repository owner explicitly selects a private reporting channel, this 
 
 ## Project license
 
-No owner-approved repository `LICENSE` has been selected in this Phase 2 hardening work. Dependency-license policy does not assign a license to ICC itself. Project licensing remains an owner decision.
+No owner-approved repository `LICENSE` has been selected. Dependency-license
+policy does not assign a license to ICC itself. Project licensing remains an
+owner decision.
 
 ## Repository governance
 
