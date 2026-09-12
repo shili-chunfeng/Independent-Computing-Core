@@ -7,6 +7,8 @@
 **Branch:** `phase-2-cryptographic-hardening`  
 **Review date:** 2026-09-11
 
+**Documentation governance correction:** 2026-09-12
+
 ---
 
 # 1. Scope
@@ -19,7 +21,12 @@ The work addresses:
 - Phase 0.2 `INV-007`, Threat `T-PKG-007` and Security Gate S2;
 - Phase 0.3 dependency-direction rules, §§44–50, 79–81, 88 and D-ARCH-004;
 - Phase 2 cryptographic test, dependency, secret-material, and verification requirements;
-- ADR-0001, ADR-0004 and ADR-0005.
+- ADR-0001 layered dependency direction and fail-closed architecture boundaries;
+- ADR-0002 Rust/Cargo 1.98.1 toolchain pinning;
+- ADR-0003 the fixed ClassicalV1 cryptographic profile;
+- ADR-0004 the portable crypto API/provider implementation boundary;
+- ADR-0005 secret-material handling, zeroization, forbidden traits/serialization, and zeroization limitations;
+- ADR-0006 reviewed profile migration, rejection of unauthenticated arbitrary algorithm negotiation, and rejection of silent downgrade.
 
 The second review specifically closes fail-open gaps for inactive optional dependencies, renamed dependencies, dependency declaration features, exact direct-version requirements, repository packages outside the workspace, all-features resolution, and secret-wrapper trait evidence.
 
@@ -113,7 +120,7 @@ The CI tool is installed as:
 cargo install --locked --version 0.20.2 cargo-deny
 ```
 
-It is D2 tooling, not a production ICC dependency. Advisory/license/source results are time-bounded evidence and are not an unsafe-code or maintenance-health audit.
+It is D2 tooling, not a production ICC dependency. The advisories, bans, licenses, and sources checks over ICC's all-features metadata are required CI gates; their results are time-bounded evidence and are not an unsafe-code or maintenance-health audit. The separate Remaining Risk concerns the `cargo-deny` tool itself and its own transitive dependencies: a complete source-level and unsafe-code audit of that tooling graph is **NOT VERIFIED**. It does not mean that the required ICC dependency source-policy gate was omitted.
 
 ---
 
@@ -276,7 +283,7 @@ Cargo.lock SHA stability
 
 Historical successful push runs demonstrate these gates incrementally, but the final branch HEAD and pull-request HEAD are intentionally **not hard-coded into this committed report**. Final run numbers, exact commit SHA, conclusions, and URLs belong in the PR description and final Completion Report so that documenting a run does not create an endless self-referencing commit/run cycle.
 
-Phase 2 hardening is not ready for owner review until the latest PR HEAD has a successful `pull_request` workflow run.
+A successful required `pull_request` workflow for the latest PR HEAD makes the hardening PR eligible for owner review only. It does not merge the hardening into `main`, complete owner acceptance, or authorize Phase 3 work from the pre-merge `main` branch.
 
 ---
 
@@ -294,7 +301,14 @@ No historical checkbox should be interpreted as current completion evidence with
 
 # 11. ADR impact
 
-ADR-0001 continues to require explicit, reviewable architecture boundaries. ADR-0004 continues to fix the approved cryptographic profile and downgrade posture. ADR-0005 continues to separate portable interfaces from provider implementation and states the distinction between repository/CI enforcement and language/runtime/formal guarantees. This second-round work changes neither those decisions nor the dependency set, algorithms, provider boundary, or threat model. No new ADR is required because it makes the already-accepted Phase 2 policy fail closed rather than introducing a new architectural decision.
+- **ADR-0001 — Layered Dependency Direction:** defines inward layered dependency direction and the architecture boundaries that this hardening makes fail closed.
+- **ADR-0002 — Pin Phase 1 to Rust 1.98.1:** defines the Rust/Cargo 1.98.1 toolchain pin used by the verification gates.
+- **ADR-0003 — Classical Crypto Profile v1:** fixes ClassicalV1 as SHA-256, HKDF-SHA-256, Ed25519, X25519, and ChaCha20-Poly1305, with Argon2id reserved for its documented future low-entropy purpose.
+- **ADR-0004 — Crypto Provider Boundary:** defines the portable `icc-crypto-api` interface and provider-implementation separation from crates such as `icc-crypto-rust` and its concrete dependencies.
+- **ADR-0005 — Secret Material and Zeroization:** governs secret-material confinement, best-effort zeroization, prohibition of `Copy`, `Clone`, `Debug`, and serialization, and the limits of software zeroization.
+- **ADR-0006 — Crypto Agility and Post-Quantum Migration:** requires migration between reviewed profiles and rejects unauthenticated arbitrary algorithm negotiation and silent downgrade.
+
+This documentation correction changes none of those accepted decisions, and it changes neither the dependency set, algorithms, provider boundary, secret policy, nor threat model. No new ADR is required because it corrects traceability to existing decisions rather than introducing a new architectural decision.
 
 ---
 
@@ -302,7 +316,8 @@ ADR-0001 continues to require explicit, reviewable architecture boundaries. ADR-
 
 - Third-party dependency unsafe-code footprint: **NOT VERIFIED** by a source-level audit.
 - Individual maintenance health of every transitive crate: **NOT VERIFIED**.
-- cargo-deny's full transitive unsafe/source audit: **NOT VERIFIED**; it remains pinned D2 CI tooling.
+- ICC all-features dependency advisories/bans/licenses/sources: required CI gates whose time-bounded result is recorded with the applicable PR HEAD; these checks are not an unsafe-code or maintenance-health audit.
+- `cargo-deny` tool and tool-transitive source/unsafe footprint: complete source-level and unsafe-code audit **NOT VERIFIED**; the tool remains pinned D2 CI tooling. This limitation is separate from, and does not negate execution of, the required ICC all-features sources gate.
 - Formal cryptographic verification: **NOT VERIFIED**.
 - ICC project license: owner decision; no `LICENSE` selected here.
 - Private vulnerability reporting channel: owner decision; no approved private channel exists in repository documentation.
@@ -328,7 +343,9 @@ Phase 3 identity state machines
 Phase 4 KeyStore
 ```
 
-`main` is not modified directly, and the hardening PR must remain unmerged for owner review. Phase 3 remains blocked until the final hardening PR HEAD has successful required GitHub Actions evidence.
+`main` is not modified directly, and the hardening PR must remain unmerged while awaiting owner review. Successful branch and pull-request CI means only that the PR can enter owner review. Phase 2 enters `main` only after owner review and PR merge.
+
+Phase 3 remains blocked until the Phase 2 hardening PR has been owner-reviewed and merged into `main`, and the resulting `main` HEAD has successful required GitHub Actions evidence. The Phase 3 branch must then be created from that verified `main` HEAD.
 
 ---
 
