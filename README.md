@@ -1,15 +1,24 @@
-# Independent Computing Core — Phase 2 Skeleton
+# Independent Computing Core — Phase 2 Cryptographic Foundation
 
-This repository is the first executable engineering baseline for the Independent Computing Core project.
+Independent Computing Core (ICC) is a portable personal-computing core intended to move from a Linux/VM prototype toward a future minimal OS without making Linux part of the Domain Core contract.
 
-It proves the architectural direction established in Phase 0.3:
+The repository currently contains the Phase 0 architecture/security baselines, Phase 1 engineering skeleton, and Phase 2 ClassicalV1 cryptographic foundation. **Phase 3 has not started.**
 
-- domain crates are portable and `no_std` where practical;
-- OS effects enter through narrow Port traits;
-- Linux-specific code lives only in Linux adapters;
-- tests can replace platform effects with deterministic adapters;
-- the CLI is a composition root, not a security authority;
-- no third-party runtime dependency is required by the baseline.
+## Architecture baseline
+
+- Domain/Core crates are `no_std` where required by Phase 0.3.
+- OS effects enter through narrow Port traits.
+- Linux-specific code is isolated in Linux adapters.
+- Domain Core does not directly depend on crypto-provider implementation crates.
+- Local authorization remains authority-side; UI/CLI is not a security authority.
+- Every workspace package has a fail-closed allowlist for all direct dependency declarations, including optional, dev, build, target-specific, path, registry, and renamed declarations.
+- The policy validates the declared version requirement, source/path identity, default-feature setting, and requested features independently of whether Cargo activates the edge.
+- Default and all-features locked graphs are checked separately; the all-features feature union must match the reviewed Phase 2 crypto feature policy.
+- The current repository dependency policy rejects direct production App dependencies on `icc-crypto-api` and `icc-crypto-rust`.
+- Secret wrapper identifiers are additionally guarded by conservative source checks outside the crypto boundary.
+- Fifteen independent `compile_fail` doctests provide compiler-level regression evidence that each of the five secret wrappers implements none of `Clone`, `Copy`, or `Debug`.
+- Source-pattern checks do not expand arbitrary macros and are not Rust AST, compiler, visibility, runtime-sandbox, or formal proofs. The compile-fail tests are compiler checks, but not formal verification.
+- Production dependency resolution is committed in the root `Cargo.lock`.
 
 ## Toolchain
 
@@ -17,37 +26,104 @@ Pinned by `rust-toolchain.toml`:
 
 ```text
 Rust 1.98.1
+Cargo 1.98.1
 Edition 2024
 ```
 
-## Expected checks
+## Phase 2 ClassicalV1
+
+```text
+Hash:          SHA-256
+KDF:           HKDF-SHA-256
+Signature:     Ed25519
+Key agreement: X25519
+AEAD:          ChaCha20-Poly1305
+```
+
+`Argon2idV13` currently has a stable algorithm identifier only; password-derived key handling is intentionally not implemented in Phase 2.
+
+## Verification commands
+
+The main verification sequence below mirrors `.github/workflows/ci.yml`.
 
 ```bash
-cargo fmt --all -- --check
-cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace
-python3 scripts/check_architecture.py
+# Pinned toolchain and bare-metal target
+rustup toolchain install 1.98.1 --profile minimal --component rustfmt,clippy
+rustup target add --toolchain 1.98.1 thumbv7em-none-eabi
+rustc --version
+cargo --version
 
-cargo check -p icc-types --no-default-features
-cargo check -p icc-error --no-default-features
-cargo check -p icc-rights --no-default-features
-cargo check -p icc-platform-api --no-default-features
-cargo check -p icc-capability-core --no-default-features
-cargo check -p icc-identity-core --no-default-features
+# Committed locked dependency graph
+test -f Cargo.lock
+cargo metadata --locked --format-version 1 \
+  > /tmp/icc-cargo-metadata-default.json
+cargo metadata --locked --all-features --format-version 1 \
+  > /tmp/icc-cargo-metadata-all-features.json
+git diff --exit-code -- Cargo.lock
+
+# Default/all-features inventory and architecture policy tests
+python3 scripts/dependency_inventory.py /tmp/icc-cargo-metadata-default.json
+python3 scripts/dependency_inventory.py /tmp/icc-cargo-metadata-all-features.json
+python3 -m unittest discover -s scripts -p 'test_*.py'
+python3 scripts/check_architecture.py \
+  --default-metadata /tmp/icc-cargo-metadata-default.json \
+  --all-features-metadata /tmp/icc-cargo-metadata-all-features.json
+
+# Rust checks
+cargo fmt --all -- --check
+cargo check --workspace --locked
+cargo check --workspace --all-features --locked
+cargo clippy --workspace --all-targets --locked -- -D warnings
+cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+cargo test --workspace --locked
+cargo test -p icc-crypto-api --doc --locked
+cargo test --workspace --all-features --locked
+
+# Bare-metal no_std portability checks
+cargo check -p icc-types --target thumbv7em-none-eabi --no-default-features --locked
+cargo check -p icc-error --target thumbv7em-none-eabi --no-default-features --locked
+cargo check -p icc-rights --target thumbv7em-none-eabi --no-default-features --locked
+cargo check -p icc-platform-api --target thumbv7em-none-eabi --no-default-features --locked
+cargo check -p icc-capability-core --target thumbv7em-none-eabi --no-default-features --locked
+cargo check -p icc-identity-core --target thumbv7em-none-eabi --no-default-features --locked
+cargo check -p icc-crypto-api --target thumbv7em-none-eabi --no-default-features --locked
+cargo check -p icc-crypto-rust --target thumbv7em-none-eabi --no-default-features --locked
+
+# Dependency policy tool; CI pins the exact version and uses the tool package lockfile
+cargo install --locked --version 0.20.2 cargo-deny
+cargo deny \
+  --metadata-path /tmp/icc-cargo-metadata-all-features.json \
+  check advisories bans licenses sources
+
+# Repeated locked release build and lockfile stability
+sha256sum Cargo.lock > /tmp/icc-cargo-lock.sha256
+cargo build --workspace --release --locked
+cargo build --workspace --release --locked
+cargo build --workspace --release --all-features --locked
+cargo build --workspace --release --all-features --locked
+sha256sum --check /tmp/icc-cargo-lock.sha256
+git diff --exit-code -- Cargo.lock
 ```
 
 ## Demo
 
 ```bash
-cargo run -p indie-cli -- doctor
-cargo run -p indie-cli -- demo
+cargo run -p indie-cli --locked -- doctor
+cargo run -p indie-cli --locked -- demo
 ```
 
-The demo does **not** claim to be a secure production runtime. It only proves dependency inversion and pure authorization semantics.
+The CLI deliberately does not depend directly on the internal crypto API/provider. Secret cryptographic operations remain exercised in provider tests; this Phase 2 hardening work does not invent a facade, service, Identity feature, or Phase 4 KeyStore merely to preserve a crypto CLI demo.
 
-See `docs/Phase_1_Project_Skeleton_and_Engineering_Baseline_v0.1.md` for the complete engineering specification.
+## Security and design documents
 
+- `SECURITY.md`
+- `docs/Phase_0_System_Constitution_v0.1.md`
+- `docs/Phase_0.2_Threat_Model_v0.1.md` (index to hash-verified split parts)
+- `docs/Phase_0.3_Architecture_Boundaries_and_Dependency_Rules_v0.1.md` (index to hash-verified split parts)
+- `docs/Phase_1_Project_Skeleton_and_Engineering_Baseline_v0.1.md`
+- `docs/Phase_2_Cryptographic_Foundation_v0.1.md`
+- `docs/security/Phase_2_Dependency_Review_v0.1.md`
+- `docs/Phase_2_Cryptographic_Hardening_Report_v0.1.md`
+- `docs/adr/ADR-0001` through `ADR-0006`
 
-## Phase 2 crypto baseline
-
-`icc-crypto-api` defines the no_std typed ClassicalV1 crypto boundary. `icc-crypto-rust` implements it with pinned RustCrypto/dalek dependencies. Run `indie-cli crypto-demo` after compiler validation to exercise SHA-256 and Ed25519 through the provider boundary.
+This is a prototype architecture/security baseline, not a production security product. See `SECURITY.md` for explicit non-claims and remaining reporting/governance risks.

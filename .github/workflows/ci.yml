@@ -9,43 +9,99 @@ permissions:
 
 jobs:
   verify:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
 
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install pinned Rust toolchain
-        run: rustup toolchain install 1.98.1 --profile minimal --component rustfmt,clippy
+        run: |
+          rustup toolchain install 1.98.1 --profile minimal --component rustfmt,clippy
+          rustup target add --toolchain 1.98.1 thumbv7em-none-eabi
 
       - name: Toolchain version
         run: |
           rustc --version
           cargo --version
 
+      - name: Verify committed locked dependency graph
+        run: |
+          test -f Cargo.lock
+          cargo metadata --locked --format-version 1 \
+            > /tmp/icc-cargo-metadata-default.json
+          cargo metadata --locked --all-features --format-version 1 \
+            > /tmp/icc-cargo-metadata-all-features.json
+          git diff --exit-code -- Cargo.lock
+
+      - name: Default resolved dependency inventory
+        run: python3 scripts/dependency_inventory.py /tmp/icc-cargo-metadata-default.json
+
+      - name: All-features resolved dependency inventory
+        run: python3 scripts/dependency_inventory.py /tmp/icc-cargo-metadata-all-features.json
+
+      - name: Architecture policy self and negative tests
+        run: python3 -m unittest discover -s scripts -p 'test_*.py'
+
       - name: Architecture boundary check
-        run: python3 scripts/check_architecture.py
+        run: |
+          python3 scripts/check_architecture.py \
+            --default-metadata /tmp/icc-cargo-metadata-default.json \
+            --all-features-metadata /tmp/icc-cargo-metadata-all-features.json
 
       - name: Formatting
         run: cargo fmt --all -- --check
 
-      - name: Clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Default workspace check
+        run: cargo check --workspace --locked
 
-      - name: Tests
-        run: cargo test --workspace
+      - name: All-features workspace check
+        run: cargo check --workspace --all-features --locked
 
-      - name: Portable no_std checks
+      - name: Default clippy
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+      - name: All-features clippy
+        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+
+      - name: Default tests
+        run: cargo test --workspace --locked
+
+      - name: Secret trait compile-fail doctests
+        run: cargo test -p icc-crypto-api --doc --locked
+
+      - name: All-features tests
+        run: cargo test --workspace --all-features --locked
+
+      - name: Bare-metal no_std portability checks
         run: |
-          cargo check -p icc-types --no-default-features
-          cargo check -p icc-error --no-default-features
-          cargo check -p icc-rights --no-default-features
-          cargo check -p icc-platform-api --no-default-features
-          cargo check -p icc-capability-core --no-default-features
-          cargo check -p icc-identity-core --no-default-features
-          cargo check -p icc-crypto-api --no-default-features
-          cargo check -p icc-crypto-rust --no-default-features
+          cargo check -p icc-types --target thumbv7em-none-eabi --no-default-features --locked
+          cargo check -p icc-error --target thumbv7em-none-eabi --no-default-features --locked
+          cargo check -p icc-rights --target thumbv7em-none-eabi --no-default-features --locked
+          cargo check -p icc-platform-api --target thumbv7em-none-eabi --no-default-features --locked
+          cargo check -p icc-capability-core --target thumbv7em-none-eabi --no-default-features --locked
+          cargo check -p icc-identity-core --target thumbv7em-none-eabi --no-default-features --locked
+          cargo check -p icc-crypto-api --target thumbv7em-none-eabi --no-default-features --locked
+          cargo check -p icc-crypto-rust --target thumbv7em-none-eabi --no-default-features --locked
 
-      - name: Release build
-        run: cargo build --workspace --release
+      - name: Install pinned dependency policy tool
+        run: |
+          cargo install --locked --version 0.20.2 cargo-deny
+          cargo deny --version
+
+      - name: Dependency advisory license source and ban checks
+        run: |
+          cargo deny \
+            --metadata-path /tmp/icc-cargo-metadata-all-features.json \
+            check advisories bans licenses sources
+
+      - name: Default and all-features locked release builds and lockfile stability
+        run: |
+          sha256sum Cargo.lock > /tmp/icc-cargo-lock.sha256
+          cargo build --workspace --release --locked
+          cargo build --workspace --release --locked
+          cargo build --workspace --release --all-features --locked
+          cargo build --workspace --release --all-features --locked
+          sha256sum --check /tmp/icc-cargo-lock.sha256
+          git diff --exit-code -- Cargo.lock
