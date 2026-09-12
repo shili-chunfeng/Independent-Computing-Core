@@ -128,6 +128,24 @@ It is D2 tooling, not a production ICC dependency. The advisories, bans, license
 
 No new primitive was invented.
 
+## SHA-256 — FIPS 180-4 / NIST validation evidence
+
+Tests include:
+
+- the existing `sha256_known_vector_abc_matches_fips_result` known-answer test for `SHA256("abc")`;
+- `sha256_empty_input_matches_known_answer`, which checks the empty-input boundary against the `Len = 0` digest in NIST CAVP's byte-oriented `SHA256ShortMsg.rsp`;
+- `sha256_input_mutation_changes_digest`, which checks that the explicit input change from `abc` to `abd` changes the returned digest;
+- a fixed 32-byte output enforced by the `Digest256` API type.
+
+SHA-256 is a one-way hash. It has neither an encryption-style round trip nor an AEAD-style authentication-failure return path, so Phase 2 §30 is applied according to the primitive's semantics through official known-answer evidence, an empty-input boundary case, an explicit input-mutation regression, and the fixed-size typed output. The mutation regression covers only that selected input pair; it is not proof of collision resistance, formal correctness, or complete cryptographic security.
+
+NIST states that its CAVP response-file vectors may be used to informally verify implementations and do not replace CAVP validation.
+
+References:
+
+- NIST FIPS 180-4 — Secure Hash Standard: <https://csrc.nist.gov/pubs/fips/180-4/upd1/final>
+- NIST CAVP — Secure Hashing test vectors: <https://csrc.nist.gov/projects/cryptographic-algorithm-validation-program/secure-hashing>
+
 ## HKDF-SHA-256 — RFC 5869
 
 Tests include:
