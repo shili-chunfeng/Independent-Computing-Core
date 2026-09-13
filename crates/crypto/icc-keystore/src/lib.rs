@@ -230,13 +230,26 @@ impl<C: CryptoProviderV1, S: KeyStateStore, R: SecureRandom> SoftwareKeyStore<C,
         id_bytes.zeroize();
         let id = found.ok_or(KeyStoreError::Entropy)?;
         let mut seed_bytes = [0_u8; 32];
-        if self.random.fill(&mut seed_bytes).is_err() || seed_bytes == [0; 32] {
+        for _ in 0..MAX_ID_ATTEMPTS {
+            if self.random.fill(&mut seed_bytes).is_err() {
+                seed_bytes.zeroize();
+                return Err(KeyStoreError::Entropy);
+            }
+            if seed_bytes == [0; 32] {
+                seed_bytes.zeroize();
+                continue;
+            }
+            let seed = Ed25519SigningSeed::from_bytes(seed_bytes);
             seed_bytes.zeroize();
-            return Err(KeyStoreError::Entropy);
+            let public = self.crypto.ed25519_public_from_seed(&seed);
+            if self.records.values().all(|record| {
+                self.crypto.ed25519_public_from_seed(&record.seed) != public
+            }) {
+                return Ok((id, Record { purpose, seed }));
+            }
         }
-        let seed = Ed25519SigningSeed::from_bytes(seed_bytes);
         seed_bytes.zeroize();
-        Ok((id, Record { purpose, seed }))
+        Err(KeyStoreError::Entropy)
     }
 
     fn descriptor(&self, id: IdentityKeyId, record: &Record) -> KeyDescriptor {
@@ -277,13 +290,23 @@ impl<C: CryptoProviderV1, S: KeyStateStore, R: SecureRandom> SoftwareKeyStore<C,
         }
         let mut plaintext = Vec::with_capacity(2 + count * RECORD_LEN);
         plaintext.extend_from_slice(&(count as u16).to_be_bytes());
+        let mut inserted = false;
         for (&id, record) in &self.records {
-            if Some(id) != excluded {
-                append_record(&mut plaintext, id, record);
+            if Some(id) == excluded {
+                continue;
             }
+            if let Some((new_id, new_record)) = included {
+                if !inserted && new_id < id {
+                    append_record(&mut plaintext, new_id, new_record);
+                    inserted = true;
+                }
+            }
+            append_record(&mut plaintext, id, record);
         }
         if let Some((id, record)) = included {
-            append_record(&mut plaintext, id, record);
+            if !inserted {
+                append_record(&mut plaintext, id, record);
+            }
         }
         let result = seal(
             &self.crypto,
@@ -451,7 +474,8 @@ fn parse_records(plaintext: &[u8]) -> Result<BTreeMap<IdentityKeyId, Record>, Ke
         return Err(KeyStoreError::Corrupt);
     }
     let mut records = BTreeMap::new();
-    for record in plaintext[2..].chunks_exact(RECORD_LEN) {
+    let mut previous = None;
+    for record in plaintext[2..].as_chunks::<RECORD_LEN>().0 {
         let id = IdentityKeyId::from_bytes(
             record[..16]
                 .try_into()
@@ -460,6 +484,10 @@ fn parse_records(plaintext: &[u8]) -> Result<BTreeMap<IdentityKeyId, Record>, Ke
         if id.as_bytes() == &[0; 16] {
             return Err(KeyStoreError::Corrupt);
         }
+        if previous.is_some_and(|last| id <= last) {
+            return Err(KeyStoreError::Corrupt);
+        }
+        previous = Some(id);
         let purpose = purpose_from_byte(record[16]).ok_or(KeyStoreError::Corrupt)?;
         let mut bytes: [u8; 32] = record[17..]
             .try_into()
@@ -738,6 +766,92 @@ mod tests {
         assert_eq!(keys.records.len(), 0);
     }
 
+    struct RepeatedSeedRandom {
+        next_id: u8,
+    }
+
+    impl SecureRandom for RepeatedSeedRandom {
+        fn fill(&mut self, output: &mut [u8]) -> Result<(), PlatformError> {
+            if output.len() == 16 {
+                output.fill(self.next_id);
+                self.next_id = self.next_id.wrapping_add(1);
+            } else {
+                output.fill(7);
+            }
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn duplicate_public_key_is_rejected_without_losing_existing_key() {
+        let state = initial().into_storage();
+        let mut keys = SoftwareKeyStore::open(
+            RustCryptoProviderV1,
+            state,
+            RepeatedSeedRandom { next_id: 1 },
+            root(),
+        )
+        .unwrap();
+        let original = keys.generate(IdentityKeyPurpose::RootAuthorization).unwrap();
+        assert_eq!(
+            keys.generate(IdentityKeyPurpose::AppAuthentication),
+            Err(KeyStoreError::Entropy)
+        );
+        assert_eq!(keys.records.len(), 1);
+        assert!(keys.sign(original, b"still valid").is_ok());
+    }
+
+    #[test]
+    fn sealed_records_are_canonically_sorted_even_after_id_wrap() {
+        let mut keys = SoftwareKeyStore::provision(
+            RustCryptoProviderV1,
+            storage(),
+            DeterministicRandom::new(230),
+            root(),
+        )
+        .unwrap();
+        let first = keys.generate(IdentityKeyPurpose::RootAuthorization).unwrap();
+        let second = keys.generate(IdentityKeyPurpose::DeviceAuthentication).unwrap();
+        assert!(second.handle() < first.handle());
+        let (epoch, snapshot) = keys.store.snapshot_for_test().unwrap();
+        let key = sealing_key(&RustCryptoProviderV1, &root(), &[0x64; 16]).unwrap();
+        let mut plaintext = RustCryptoProviderV1
+            .chacha20poly1305_open(
+                &key,
+                nonce(epoch),
+                &snapshot[..HEADER_LEN],
+                &snapshot[HEADER_LEN..],
+            )
+            .unwrap();
+        assert_eq!(&plaintext[..2], &[0, 2]);
+        assert!(&plaintext[2..18] < &plaintext[2 + RECORD_LEN..18 + RECORD_LEN]);
+        plaintext.as_mut_slice().zeroize();
+    }
+
+    struct RepeatedIdRandom;
+
+    impl SecureRandom for RepeatedIdRandom {
+        fn fill(&mut self, output: &mut [u8]) -> Result<(), PlatformError> {
+            let byte = if output.len() == 16 { 1 } else { 2 };
+            output.fill(byte);
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn exhausted_id_collisions_do_not_create_another_key() {
+        let state = initial().into_storage();
+        let mut keys =
+            SoftwareKeyStore::open(RustCryptoProviderV1, state, RepeatedIdRandom, root()).unwrap();
+        let existing = keys.generate(IdentityKeyPurpose::RootAuthorization).unwrap();
+        assert_eq!(
+            keys.generate(IdentityKeyPurpose::AppAuthentication),
+            Err(KeyStoreError::Entropy)
+        );
+        assert_eq!(keys.records.len(), 1);
+        keys.verify_binding(existing).unwrap();
+    }
+
     #[test]
     fn decoder_rejects_truncation_count_purpose_duplicate_and_extra_bytes() {
         assert!(parse_records(&[]).is_err());
@@ -755,6 +869,13 @@ mod tests {
         assert!(parse_records(&record).is_err());
         record.push(1);
         assert!(parse_records(&record).is_err());
+        let mut unsorted = alloc::vec![0; 2 + 2 * RECORD_LEN];
+        unsorted[1] = 2;
+        unsorted[2] = 9;
+        unsorted[18] = 1;
+        unsorted[2 + RECORD_LEN] = 7;
+        unsorted[18 + RECORD_LEN] = 2;
+        assert!(parse_records(&unsorted).is_err());
     }
 
     #[test]
