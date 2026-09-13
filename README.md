@@ -1,10 +1,13 @@
-# Independent Computing Core — Phase 3 Identity Core
+# Independent Computing Core — Phase 4 KeyStore review
 
 Independent Computing Core (ICC) is a portable personal-computing core intended to move from a Linux/VM prototype toward a future minimal OS without making Linux part of the Domain Core contract.
 
 The repository contains the Phase 0 architecture/security baselines, Phase 1
 engineering skeleton, Phase 2 ClassicalV1 cryptographic foundation, and the
-Phase 3 portable identity-authority state machine.
+Phase 3 portable identity-authority state machine, and a proposed Phase 4
+non-exporting software KeyStore for owner review. The KeyStore's durable
+anti-rollback storage Port and seal-root provisioning have no production Linux
+implementation yet; see `docs/Phase_4_KeyStore_and_Secret_Operations_v0.1.md`.
 
 ## Mandatory project execution contract
 

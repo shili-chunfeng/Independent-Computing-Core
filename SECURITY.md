@@ -1,7 +1,16 @@
 # Security Baseline
 
-Independent Computing Core is currently a **Phase 3 architecture/security
+Independent Computing Core is currently a **Phase 4 architecture/security
 prototype**, not a production security product.
+
+The proposed A1-only KeyStore binds `IdentityKeyId`, purpose, and public key to
+the signing seed, and commits an authenticated snapshot before key lifecycle
+changes become visible. `KeyHandle` is a reference, **not** permission to sign:
+a future trusted service must bind the actual caller before invoking it. Its
+in-memory test Port models rollback-resistant atomic state, but no production
+Linux anti-rollback adapter, seal-root provisioning, or App-facing permission
+gate exists. Do not claim actual durable anti-rollback, host-root, physical,
+swap, or crash-dump protection. Identity Core still lacks durable persistence.
 
 The security model is defined primarily by:
 
