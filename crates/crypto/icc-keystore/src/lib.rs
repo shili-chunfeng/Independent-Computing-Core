@@ -204,7 +204,10 @@ impl<C: CryptoProviderV1, S: KeyStateStore, R: SecureRandom> SoftwareKeyStore<C,
         Ok(record)
     }
 
-    fn new_record(&mut self, purpose: IdentityKeyPurpose) -> Result<(IdentityKeyId, Record), KeyStoreError> {
+    fn new_record(
+        &mut self,
+        purpose: IdentityKeyPurpose,
+    ) -> Result<(IdentityKeyId, Record), KeyStoreError> {
         if self.poisoned {
             return Err(KeyStoreError::Unavailable);
         }
@@ -267,8 +270,8 @@ impl<C: CryptoProviderV1, S: KeyStateStore, R: SecureRandom> SoftwareKeyStore<C,
         if reserved <= self.committed {
             return Err(KeyStoreError::Corrupt);
         }
-        let count = self.records.len() - usize::from(excluded.is_some())
-            + usize::from(included.is_some());
+        let count =
+            self.records.len() - usize::from(excluded.is_some()) + usize::from(included.is_some());
         if count > MAX_KEYS {
             return Err(KeyStoreError::Capacity);
         }
@@ -282,8 +285,14 @@ impl<C: CryptoProviderV1, S: KeyStateStore, R: SecureRandom> SoftwareKeyStore<C,
         if let Some((id, record)) = included {
             append_record(&mut plaintext, id, record);
         }
-        let result = seal(&self.crypto, &self.root, self.namespace, reserved, &plaintext);
-        plaintext.zeroize();
+        let result = seal(
+            &self.crypto,
+            &self.root,
+            self.namespace,
+            reserved,
+            &plaintext,
+        );
+        plaintext.as_mut_slice().zeroize();
         let sealed = result?;
         self.store
             .commit(self.committed, reserved, &sealed)
@@ -418,13 +427,18 @@ fn decode<C: CryptoProviderV1>(
     }
     let key = sealing_key(crypto, root, &namespace)?;
     let mut plaintext = crypto
-        .chacha20poly1305_open(&key, nonce(epoch), &snapshot[..HEADER_LEN], &snapshot[HEADER_LEN..])
+        .chacha20poly1305_open(
+            &key,
+            nonce(epoch),
+            &snapshot[..HEADER_LEN],
+            &snapshot[HEADER_LEN..],
+        )
         .map_err(|error| match error {
             CryptoError::AuthenticationFailed => KeyStoreError::Corrupt,
             _ => KeyStoreError::Crypto,
         })?;
     let result = parse_records(&plaintext);
-    plaintext.zeroize();
+    plaintext.as_mut_slice().zeroize();
     result
 }
 
@@ -438,12 +452,18 @@ fn parse_records(plaintext: &[u8]) -> Result<BTreeMap<IdentityKeyId, Record>, Ke
     }
     let mut records = BTreeMap::new();
     for record in plaintext[2..].chunks_exact(RECORD_LEN) {
-        let id = IdentityKeyId::from_bytes(record[..16].try_into().map_err(|_| KeyStoreError::Corrupt)?);
+        let id = IdentityKeyId::from_bytes(
+            record[..16]
+                .try_into()
+                .map_err(|_| KeyStoreError::Corrupt)?,
+        );
         if id.as_bytes() == &[0; 16] {
             return Err(KeyStoreError::Corrupt);
         }
         let purpose = purpose_from_byte(record[16]).ok_or(KeyStoreError::Corrupt)?;
-        let mut bytes: [u8; 32] = record[17..].try_into().map_err(|_| KeyStoreError::Corrupt)?;
+        let mut bytes: [u8; 32] = record[17..]
+            .try_into()
+            .map_err(|_| KeyStoreError::Corrupt)?;
         let seed = Ed25519SigningSeed::from_bytes(bytes);
         bytes.zeroize();
         if records.insert(id, Record { purpose, seed }).is_some() {
@@ -467,54 +487,110 @@ mod tests {
         InMemoryKeyStateStore::new([0x64; 16])
     }
 
-    fn initial() -> SoftwareKeyStore<RustCryptoProviderV1, InMemoryKeyStateStore, DeterministicRandom> {
-        SoftwareKeyStore::provision(RustCryptoProviderV1, storage(), DeterministicRandom::new(1), root()).unwrap()
+    fn initial()
+    -> SoftwareKeyStore<RustCryptoProviderV1, InMemoryKeyStateStore, DeterministicRandom> {
+        SoftwareKeyStore::provision(
+            RustCryptoProviderV1,
+            storage(),
+            DeterministicRandom::new(1),
+            root(),
+        )
+        .unwrap()
     }
 
     #[test]
     fn generate_sign_and_exact_identity_binding_survive_restart() {
         let mut keys = initial();
-        let descriptor = keys.generate(IdentityKeyPurpose::RootAuthorization).unwrap();
-        let signature = keys.sign(descriptor, b"ICC/test/root/authorization/v1").unwrap();
-        RustCryptoProviderV1.ed25519_verify(
-            &descriptor.binding().public_key(),
-            b"ICC/test/root/authorization/v1",
-            &signature,
-        ).unwrap();
-        assert!(RustCryptoProviderV1.ed25519_verify(
-            &descriptor.binding().public_key(), b"other message", &signature
-        ).is_err());
+        let descriptor = keys
+            .generate(IdentityKeyPurpose::RootAuthorization)
+            .unwrap();
+        let signature = keys
+            .sign(descriptor, b"ICC/test/root/authorization/v1")
+            .unwrap();
+        RustCryptoProviderV1
+            .ed25519_verify(
+                &descriptor.binding().public_key(),
+                b"ICC/test/root/authorization/v1",
+                &signature,
+            )
+            .unwrap();
+        assert!(
+            RustCryptoProviderV1
+                .ed25519_verify(
+                    &descriptor.binding().public_key(),
+                    b"other message",
+                    &signature
+                )
+                .is_err()
+        );
         let snapshot = keys.store.snapshot_for_test().unwrap().1;
         let expected_seed: Vec<u8> = (17..49).collect();
         assert!(!snapshot.windows(32).any(|window| window == expected_seed));
 
         let state = keys.into_storage();
-        let restored = SoftwareKeyStore::open(RustCryptoProviderV1, state, DeterministicRandom::new(90), root()).unwrap();
+        let restored = SoftwareKeyStore::open(
+            RustCryptoProviderV1,
+            state,
+            DeterministicRandom::new(90),
+            root(),
+        )
+        .unwrap();
         restored.verify_binding(descriptor).unwrap();
-        assert_eq!(restored.sign(descriptor, b"ICC/test/root/authorization/v1"), Ok(signature));
+        assert_eq!(
+            restored.sign(descriptor, b"ICC/test/root/authorization/v1"),
+            Ok(signature)
+        );
     }
 
     #[test]
     fn wrong_handle_purpose_and_public_key_cannot_sign() {
         let mut keys = initial();
-        let root_key = keys.generate(IdentityKeyPurpose::RootAuthorization).unwrap();
-        let app_key = keys.generate(IdentityKeyPurpose::AppAuthentication).unwrap();
+        let root_key = keys
+            .generate(IdentityKeyPurpose::RootAuthorization)
+            .unwrap();
+        let app_key = keys
+            .generate(IdentityKeyPurpose::AppAuthentication)
+            .unwrap();
         assert_ne!(root_key.handle(), app_key.handle());
-        let substitute = KeyDescriptor { handle: root_key.handle(), binding: app_key.binding() };
-        assert_eq!(keys.sign(substitute, b"x"), Err(KeyStoreError::BindingMismatch));
+        let substitute = KeyDescriptor {
+            handle: root_key.handle(),
+            binding: app_key.binding(),
+        };
+        assert_eq!(
+            keys.sign(substitute, b"x"),
+            Err(KeyStoreError::BindingMismatch)
+        );
         let wrong_purpose = KeyDescriptor {
             handle: root_key.handle(),
-            binding: IdentityKeyBinding::new(root_key.binding().id(), IdentityKeyPurpose::AppAuthentication, root_key.binding().public_key()),
+            binding: IdentityKeyBinding::new(
+                root_key.binding().id(),
+                IdentityKeyPurpose::AppAuthentication,
+                root_key.binding().public_key(),
+            ),
         };
-        assert_eq!(keys.sign(wrong_purpose, b"x"), Err(KeyStoreError::BindingMismatch));
+        assert_eq!(
+            keys.sign(wrong_purpose, b"x"),
+            Err(KeyStoreError::BindingMismatch)
+        );
         let wrong_public = KeyDescriptor {
             handle: root_key.handle(),
-            binding: IdentityKeyBinding::new(root_key.binding().id(), IdentityKeyPurpose::RootAuthorization, app_key.binding().public_key()),
+            binding: IdentityKeyBinding::new(
+                root_key.binding().id(),
+                IdentityKeyPurpose::RootAuthorization,
+                app_key.binding().public_key(),
+            ),
         };
-        assert_eq!(keys.verify_binding(wrong_public), Err(KeyStoreError::BindingMismatch));
+        assert_eq!(
+            keys.verify_binding(wrong_public),
+            Err(KeyStoreError::BindingMismatch)
+        );
         let missing = KeyDescriptor {
             handle: KeyHandle::from_bytes([99; 16]),
-            binding: IdentityKeyBinding::new(IdentityKeyId::from_bytes([99; 16]), IdentityKeyPurpose::RootAuthorization, root_key.binding().public_key()),
+            binding: IdentityKeyBinding::new(
+                IdentityKeyId::from_bytes([99; 16]),
+                IdentityKeyPurpose::RootAuthorization,
+                root_key.binding().public_key(),
+            ),
         };
         assert_eq!(keys.sign(missing, b"x"), Err(KeyStoreError::NotFound));
     }
@@ -522,55 +598,123 @@ mod tests {
     #[test]
     fn rotation_and_destruction_are_persisted_before_success() {
         let mut keys = initial();
-        let old = keys.generate(IdentityKeyPurpose::DeviceAuthentication).unwrap();
+        let old = keys
+            .generate(IdentityKeyPurpose::DeviceAuthentication)
+            .unwrap();
         let new = keys.rotate(old).unwrap();
         assert_ne!(new.handle(), old.handle());
         assert_eq!(keys.sign(old, b"x"), Err(KeyStoreError::NotFound));
         let keys_store = keys.into_storage();
-        let mut restored = SoftwareKeyStore::open(RustCryptoProviderV1, keys_store, DeterministicRandom::new(100), root()).unwrap();
+        let mut restored = SoftwareKeyStore::open(
+            RustCryptoProviderV1,
+            keys_store,
+            DeterministicRandom::new(100),
+            root(),
+        )
+        .unwrap();
         assert_eq!(restored.sign(old, b"x"), Err(KeyStoreError::NotFound));
         restored.verify_binding(new).unwrap();
         restored.destroy(new).unwrap();
         let state = restored.into_storage();
-        let reopened = SoftwareKeyStore::open(RustCryptoProviderV1, state, DeterministicRandom::new(120), root()).unwrap();
+        let reopened = SoftwareKeyStore::open(
+            RustCryptoProviderV1,
+            state,
+            DeterministicRandom::new(120),
+            root(),
+        )
+        .unwrap();
         assert_eq!(reopened.sign(new, b"x"), Err(KeyStoreError::NotFound));
     }
 
     #[test]
     fn failed_and_ambiguous_commit_poison_instance_then_reopen() {
         let mut keys = initial();
-        let old = keys.generate(IdentityKeyPurpose::AppAuthentication).unwrap();
+        let old = keys
+            .generate(IdentityKeyPurpose::AppAuthentication)
+            .unwrap();
         keys.store.fail_before_commit();
-        assert!(matches!(keys.rotate(old), Err(KeyStoreError::Storage(PlatformError::Unavailable))));
+        assert!(matches!(
+            keys.rotate(old),
+            Err(KeyStoreError::Storage(PlatformError::Unavailable))
+        ));
         assert_eq!(keys.sign(old, b"x"), Err(KeyStoreError::Unavailable));
         let state = keys.into_storage();
-        let mut reopened = SoftwareKeyStore::open(RustCryptoProviderV1, state, DeterministicRandom::new(150), root()).unwrap();
+        let mut reopened = SoftwareKeyStore::open(
+            RustCryptoProviderV1,
+            state,
+            DeterministicRandom::new(150),
+            root(),
+        )
+        .unwrap();
         reopened.verify_binding(old).unwrap();
         reopened.store.fail_after_commit();
-        assert!(matches!(reopened.destroy(old), Err(KeyStoreError::Storage(PlatformError::Unavailable))));
+        assert!(matches!(
+            reopened.destroy(old),
+            Err(KeyStoreError::Storage(PlatformError::Unavailable))
+        ));
         assert_eq!(reopened.sign(old, b"x"), Err(KeyStoreError::Unavailable));
         let state = reopened.into_storage();
-        let committed = SoftwareKeyStore::open(RustCryptoProviderV1, state, DeterministicRandom::new(170), root()).unwrap();
+        let committed = SoftwareKeyStore::open(
+            RustCryptoProviderV1,
+            state,
+            DeterministicRandom::new(170),
+            root(),
+        )
+        .unwrap();
         assert_eq!(committed.sign(old, b"x"), Err(KeyStoreError::NotFound));
     }
 
     #[test]
     fn missing_corrupt_old_or_wrong_root_state_fails_closed() {
-        assert!(matches!(SoftwareKeyStore::open(RustCryptoProviderV1, storage(), DeterministicRandom::new(1), root()), Err(KeyStoreError::Unprovisioned)));
+        assert!(matches!(
+            SoftwareKeyStore::open(
+                RustCryptoProviderV1,
+                storage(),
+                DeterministicRandom::new(1),
+                root()
+            ),
+            Err(KeyStoreError::Unprovisioned)
+        ));
         let mut keys = initial();
         let prior = keys.store.snapshot_for_test();
-        let _ = keys.generate(IdentityKeyPurpose::RecoveryAuthorization).unwrap();
+        let _ = keys
+            .generate(IdentityKeyPurpose::RecoveryAuthorization)
+            .unwrap();
         let mut state = keys.into_storage();
         state.replace_snapshot_for_test(prior);
-        assert!(matches!(SoftwareKeyStore::open(RustCryptoProviderV1, state, DeterministicRandom::new(1), root()), Err(KeyStoreError::Storage(PlatformError::Corrupt))));
+        assert!(matches!(
+            SoftwareKeyStore::open(
+                RustCryptoProviderV1,
+                state,
+                DeterministicRandom::new(1),
+                root()
+            ),
+            Err(KeyStoreError::Storage(PlatformError::Corrupt))
+        ));
 
         let state = initial().into_storage();
-        assert!(matches!(SoftwareKeyStore::open(RustCryptoProviderV1, state, DeterministicRandom::new(1), AeadKey32::from_bytes([0x22; 32])), Err(KeyStoreError::Corrupt)));
+        assert!(matches!(
+            SoftwareKeyStore::open(
+                RustCryptoProviderV1,
+                state,
+                DeterministicRandom::new(1),
+                AeadKey32::from_bytes([0x22; 32])
+            ),
+            Err(KeyStoreError::Corrupt)
+        ));
         let mut state = initial().into_storage();
         let (epoch, mut snapshot) = state.snapshot_for_test().unwrap();
         snapshot[8] ^= 1;
         state.replace_snapshot_for_test(Some((epoch, snapshot)));
-        assert!(matches!(SoftwareKeyStore::open(RustCryptoProviderV1, state, DeterministicRandom::new(1), root()), Err(KeyStoreError::Corrupt)));
+        assert!(matches!(
+            SoftwareKeyStore::open(
+                RustCryptoProviderV1,
+                state,
+                DeterministicRandom::new(1),
+                root()
+            ),
+            Err(KeyStoreError::Corrupt)
+        ));
     }
 
     struct ZeroRandom;
@@ -585,8 +729,12 @@ mod tests {
     #[test]
     fn insufficient_entropy_does_not_create_identity_key() {
         let state = initial().into_storage();
-        let mut keys = SoftwareKeyStore::open(RustCryptoProviderV1, state, ZeroRandom, root()).unwrap();
-        assert!(matches!(keys.generate(IdentityKeyPurpose::RootAuthorization), Err(KeyStoreError::Entropy)));
+        let mut keys =
+            SoftwareKeyStore::open(RustCryptoProviderV1, state, ZeroRandom, root()).unwrap();
+        assert!(matches!(
+            keys.generate(IdentityKeyPurpose::RootAuthorization),
+            Err(KeyStoreError::Entropy)
+        ));
         assert_eq!(keys.records.len(), 0);
     }
 

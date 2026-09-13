@@ -3,7 +3,9 @@
 use std::collections::BTreeMap;
 
 use icc_error::PlatformError;
-use icc_platform_api::{Clock, KeyStateStore, ObjectStore, SecretStore, SecureRandom, SecurityStateStore};
+use icc_platform_api::{
+    Clock, KeyStateStore, ObjectStore, SecretStore, SecureRandom, SecurityStateStore,
+};
 use icc_types::{MonotonicMs, ObjectId, SecretHandle, SecurityStateKey, WallTimeMs};
 
 #[derive(Debug)]
