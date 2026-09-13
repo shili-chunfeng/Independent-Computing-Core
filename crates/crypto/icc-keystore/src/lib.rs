@@ -165,7 +165,12 @@ impl<C: CryptoProviderV1, S: KeyStateStore, R: SecureRandom> SoftwareKeyStore<C,
     }
 
     /// Load only a trusted current snapshot; missing state is never recreated.
-    pub fn open(crypto: C, mut store: S, random: R, root: AeadKey32) -> Result<Self, KeyStoreError> {
+    pub fn open(
+        crypto: C,
+        mut store: S,
+        random: R,
+        root: AeadKey32,
+    ) -> Result<Self, KeyStoreError> {
         store.acquire_exclusive().map_err(KeyStoreError::Storage)?;
         let namespace = store.namespace().map_err(KeyStoreError::Storage)?;
         if namespace == [0; 16] {
@@ -604,8 +609,13 @@ mod tests {
         bytes
     }
 
-    fn parse_test(bytes: &[u8], epoch: u64) -> Result<BTreeMap<IdentityKeyId, Record>, KeyStoreError> {
-        parse_records(bytes, epoch, |seed| RustCryptoProviderV1.ed25519_public_from_seed(seed))
+    fn parse_test(
+        bytes: &[u8],
+        epoch: u64,
+    ) -> Result<BTreeMap<IdentityKeyId, Record>, KeyStoreError> {
+        parse_records(bytes, epoch, |seed| {
+            RustCryptoProviderV1.ed25519_public_from_seed(seed)
+        })
     }
 
     fn initial()
@@ -962,19 +972,29 @@ mod tests {
         let state = initial().into_storage();
         let mut keys =
             SoftwareKeyStore::open(RustCryptoProviderV1, state, RepeatedIdRandom, root()).unwrap();
-        let old = keys.generate(IdentityKeyPurpose::RootAuthorization).unwrap();
+        let old = keys
+            .generate(IdentityKeyPurpose::RootAuthorization)
+            .unwrap();
         keys.destroy(old).unwrap();
-        let replacement = keys.generate(IdentityKeyPurpose::RootAuthorization).unwrap();
+        let replacement = keys
+            .generate(IdentityKeyPurpose::RootAuthorization)
+            .unwrap();
         assert_eq!(old.handle(), replacement.handle());
         assert_eq!(old.binding(), replacement.binding());
         assert_ne!(old.generation(), replacement.generation());
-        assert_eq!(keys.sign(old, b"revoked"), Err(KeyStoreError::BindingMismatch));
+        assert_eq!(
+            keys.sign(old, b"revoked"),
+            Err(KeyStoreError::BindingMismatch)
+        );
         assert!(keys.sign(replacement, b"current").is_ok());
 
         let state = keys.into_storage();
         let restored =
             SoftwareKeyStore::open(RustCryptoProviderV1, state, RepeatedIdRandom, root()).unwrap();
-        assert_eq!(restored.sign(old, b"revoked"), Err(KeyStoreError::BindingMismatch));
+        assert_eq!(
+            restored.sign(old, b"revoked"),
+            Err(KeyStoreError::BindingMismatch)
+        );
         restored.verify_binding(replacement).unwrap();
     }
 
@@ -1004,11 +1024,15 @@ mod tests {
             root(),
         )
         .unwrap();
-        let old = keys.generate(IdentityKeyPurpose::DeviceAuthentication).unwrap();
+        let old = keys
+            .generate(IdentityKeyPurpose::DeviceAuthentication)
+            .unwrap();
         let rotated = keys.rotate(old).unwrap();
         assert_ne!(old.binding(), rotated.binding());
         keys.random.next_id = 1;
-        let repeated = keys.generate(IdentityKeyPurpose::DeviceAuthentication).unwrap();
+        let repeated = keys
+            .generate(IdentityKeyPurpose::DeviceAuthentication)
+            .unwrap();
         assert_eq!(old.binding(), repeated.binding());
         assert_ne!(old.generation(), repeated.generation());
         assert_eq!(keys.sign(old, b"old"), Err(KeyStoreError::BindingMismatch));
@@ -1020,14 +1044,19 @@ mod tests {
             root(),
         )
         .unwrap();
-        assert_eq!(restored.sign(old, b"old"), Err(KeyStoreError::BindingMismatch));
+        assert_eq!(
+            restored.sign(old, b"old"),
+            Err(KeyStoreError::BindingMismatch)
+        );
         assert!(restored.sign(repeated, b"new").is_ok());
     }
 
     #[test]
     fn exclusive_lease_prevents_parallel_stale_signing_across_destroy_and_rotate() {
         let mut owner = initial();
-        let old = owner.generate(IdentityKeyPurpose::DeviceAuthentication).unwrap();
+        let old = owner
+            .generate(IdentityKeyPurpose::DeviceAuthentication)
+            .unwrap();
         let contender = owner.store.fork_for_test();
         assert!(matches!(
             SoftwareKeyStore::open(RustCryptoProviderV1, contender, ZeroRandom, root()),
@@ -1053,7 +1082,9 @@ mod tests {
             root(),
         )
         .unwrap();
-        let old = owner.generate(IdentityKeyPurpose::AppAuthentication).unwrap();
+        let old = owner
+            .generate(IdentityKeyPurpose::AppAuthentication)
+            .unwrap();
         let contender = owner.store.fork_for_test();
         let current = owner.rotate(old).unwrap();
         assert!(matches!(
@@ -1100,41 +1131,42 @@ mod tests {
         assert!(parse_test(&record, 3).is_err());
         record.push(1);
         assert!(parse_test(&record, 3).is_err());
-        assert!(parse_test(&test_payload(&[
-            test_record(9, 2, 1, 7),
-            test_record(7, 3, 2, 8),
-        ]), 3).is_err());
+        assert!(
+            parse_test(
+                &test_payload(&[test_record(9, 2, 1, 7), test_record(7, 3, 2, 8),]),
+                3
+            )
+            .is_err()
+        );
     }
 
     #[test]
     fn decoder_rejects_zero_seed_duplicate_seed_public_and_generation() {
         let zero = test_payload(&[test_record(1, 2, 1, 0)]);
         assert!(parse_test(&zero, 3).is_err());
-        let duplicate_seed = test_payload(&[
-            test_record(1, 2, 1, 7),
-            test_record(2, 3, 2, 7),
-        ]);
+        let duplicate_seed = test_payload(&[test_record(1, 2, 1, 7), test_record(2, 3, 2, 7)]);
         assert!(parse_test(&duplicate_seed, 3).is_err());
-        let duplicate_generation = test_payload(&[
-            test_record(1, 2, 1, 7),
-            test_record(2, 2, 2, 8),
-        ]);
+        let duplicate_generation =
+            test_payload(&[test_record(1, 2, 1, 7), test_record(2, 2, 2, 8)]);
         assert!(parse_test(&duplicate_generation, 3).is_err());
         assert!(parse_test(&test_payload(&[test_record(1, 0, 1, 7)]), 3).is_err());
         assert!(parse_test(&test_payload(&[test_record(1, 4, 1, 7)]), 3).is_err());
-        let different_seeds = test_payload(&[
-            test_record(1, 2, 1, 7),
-            test_record(2, 3, 2, 8),
-        ]);
+        let different_seeds = test_payload(&[test_record(1, 2, 1, 7), test_record(2, 3, 2, 8)]);
         assert!(parse_test(&different_seeds, 3).is_ok());
-        assert!(parse_records(&different_seeds, 3, |_| {
-            Ed25519PublicKey::from_bytes([42; 32])
-        })
-        .is_err());
+        assert!(
+            parse_records(&different_seeds, 3, |_| {
+                Ed25519PublicKey::from_bytes([42; 32])
+            })
+            .is_err()
+        );
 
         let mut keys = initial();
-        let _ = keys.generate(IdentityKeyPurpose::RootAuthorization).unwrap();
-        let _ = keys.generate(IdentityKeyPurpose::DeviceAuthentication).unwrap();
+        let _ = keys
+            .generate(IdentityKeyPurpose::RootAuthorization)
+            .unwrap();
+        let _ = keys
+            .generate(IdentityKeyPurpose::DeviceAuthentication)
+            .unwrap();
         let mut state = keys.into_storage();
         let epoch = state.snapshot_for_test().unwrap().0;
         for payload in [&zero, &duplicate_seed] {
