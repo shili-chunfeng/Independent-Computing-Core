@@ -297,18 +297,14 @@ impl<C: CryptoProviderV1, S: KeyStateStore, R: SecureRandom> SoftwareKeyStore<C,
             if Some(id) == excluded {
                 continue;
             }
-            if let Some((new_id, new_record)) = included {
-                if !inserted && new_id < id {
-                    append_record(&mut plaintext, new_id, new_record);
-                    inserted = true;
-                }
+            if let Some((new_id, new_record)) = included && !inserted && new_id < id {
+                append_record(&mut plaintext, new_id, new_record);
+                inserted = true;
             }
             append_record(&mut plaintext, id, record);
         }
-        if let Some((id, record)) = included {
-            if !inserted {
-                append_record(&mut plaintext, id, record);
-            }
+        if let Some((id, record)) = included && !inserted {
+            append_record(&mut plaintext, id, record);
         }
         let result = seal(
             &self.crypto,
@@ -832,7 +828,7 @@ mod tests {
             )
             .unwrap();
         assert_eq!(&plaintext[..2], &[0, 2]);
-        assert!(&plaintext[2..18] < &plaintext[2 + RECORD_LEN..18 + RECORD_LEN]);
+        assert!(plaintext[2..18] < plaintext[2 + RECORD_LEN..18 + RECORD_LEN]);
         plaintext.as_mut_slice().zeroize();
     }
 
@@ -874,7 +870,7 @@ mod tests {
         record[18] = 255;
         assert!(parse_records(&record).is_err());
         record[18] = 1;
-        record.extend_from_slice(&record[2..].to_vec());
+        record.extend_from_within(2..);
         record[1] = 2;
         assert!(parse_records(&record).is_err());
         record.push(1);
