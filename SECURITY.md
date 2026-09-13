@@ -1,7 +1,27 @@
 # Security Baseline
 
-Independent Computing Core is currently a **Phase 3 architecture/security
+Independent Computing Core is currently a **Phase 4 architecture/security
 prototype**, not a production security product.
+
+The proposed A1-only KeyStore binds `IdentityKeyId`, purpose, and public key to
+the signing seed, and commits an authenticated snapshot before key lifecycle
+changes become visible. `KeyHandle` is a reference, **not** permission to sign:
+a future trusted service must bind the actual caller before invoking it. Its
+in-memory test Port models rollback-resistant atomic state, but no production
+Linux anti-rollback adapter, seal-root provisioning, or App-facing permission
+gate exists. Do not claim actual durable anti-rollback, host-root, physical,
+swap, or crash-dump protection. Identity Core still lacks durable persistence.
+
+PR #4's v2 review remediation binds each descriptor to a trusted never-reused
+issuance epoch and requires an exclusive, non-stealable Port lease for the
+entire live signing instance. New-head evidence must come from PR #4's actual
+push and PR CI, not its prior green run. The memory test Port models
+same-process exclusion only;
+there is no production interprocess/hardware lease, so production revocation
+consistency is not claimed. v1 snapshots are refused by v2 without implicit
+migration or re-provisioning; old identities require a separately reviewed
+rekey/reconciliation procedure. Decoder zero/duplicate-secret rejection is
+likewise not evidenced by the historical CI run.
 
 The security model is defined primarily by:
 
@@ -11,6 +31,7 @@ The security model is defined primarily by:
 - `docs/Phase_2_Cryptographic_Foundation_v0.1.md`
 - `docs/security/Phase_2_Dependency_Review_v0.1.md`
 - `docs/Phase_3_Identity_Core_v0.1.md`
+- `docs/Phase_4_KeyStore_and_Secret_Operations_v0.1.md`
 
 ## Explicit prototype limits
 
@@ -82,7 +103,7 @@ Security-critical rules include:
 - Linux-specific APIs remain in platform adapters.
 - Domain Core must not directly depend on provider implementation crates.
 - The per-package repository policy rejects direct production App dependencies
-  on `icc-identity-core`, `icc-crypto-api`, and `icc-crypto-rust`.
+  on `icc-identity-core`, `icc-crypto-api`, `icc-crypto-rust`, and `icc-keystore`.
 - `icc-identity-core -> icc-platform-api` is an explicit reviewed Phase 1 Port dependency-inversion edge; it does not authorize a general L2-to-Port dependency rule.
 - `icc-identity-core -> icc-crypto-api` is the reviewed Phase 3 provider-neutral
   signature-verification edge; a Domain-Core dependency on `icc-crypto-rust`

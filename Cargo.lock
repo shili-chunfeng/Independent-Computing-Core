@@ -258,6 +258,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "icc-keystore"
+version = "0.2.0"
+dependencies = [
+ "icc-crypto-api",
+ "icc-crypto-rust",
+ "icc-error",
+ "icc-identity-core",
+ "icc-platform-api",
+ "icc-test-support",
+ "icc-types",
+ "zeroize",
+]
+
+[[package]]
 name = "icc-platform-api"
 version = "0.2.0"
 dependencies = [

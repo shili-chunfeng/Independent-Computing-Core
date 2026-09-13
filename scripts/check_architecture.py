@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Phase 3 architecture and dependency-boundary guard.
+"""Phase 4 architecture and dependency-boundary guard.
 
 This checker combines conservative source-pattern analysis with both the
 default and all-features graphs from ``cargo metadata --locked``. Manifest
@@ -99,11 +99,11 @@ class DependencyDeclaration:
     registry: str | None
 
 
-def path_dependency(name: str) -> DependencyDeclaration:
+def path_dependency(name: str, *, kind: str = "normal") -> DependencyDeclaration:
     return DependencyDeclaration(
         actual_package=name,
         alias=name,
-        kind="normal",
+        kind=kind,
         target=None,
         optional=False,
         source=None,
@@ -195,6 +195,18 @@ PACKAGE_DECLARATION_POLICY: dict[str, frozenset[DependencyDeclaration]] = {
                 uses_default_features=False,
                 features=("static_secrets", "zeroize"),
             ),
+        }
+    ),
+    "icc-keystore": frozenset(
+        {
+            path_dependency("icc-crypto-api"),
+            path_dependency("icc-error"),
+            path_dependency("icc-identity-core"),
+            path_dependency("icc-platform-api"),
+            path_dependency("icc-types"),
+            registry_dependency("zeroize", "1.9.0", uses_default_features=False),
+            path_dependency("icc-crypto-rust", kind="dev"),
+            path_dependency("icc-test-support", kind="dev"),
         }
     ),
     "icc-test-support": frozenset(
