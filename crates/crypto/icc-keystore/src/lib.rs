@@ -297,13 +297,18 @@ impl<C: CryptoProviderV1, S: KeyStateStore, R: SecureRandom> SoftwareKeyStore<C,
             if Some(id) == excluded {
                 continue;
             }
-            if let Some((new_id, new_record)) = included && !inserted && new_id < id {
+            if let Some((new_id, new_record)) = included
+                && !inserted
+                && new_id < id
+            {
                 append_record(&mut plaintext, new_id, new_record);
                 inserted = true;
             }
             append_record(&mut plaintext, id, record);
         }
-        if let Some((id, record)) = included && !inserted {
+        if let Some((id, record)) = included
+            && !inserted
+        {
             append_record(&mut plaintext, id, record);
         }
         let result = seal(
