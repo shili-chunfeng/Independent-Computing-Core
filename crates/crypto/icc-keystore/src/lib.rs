@@ -242,9 +242,11 @@ impl<C: CryptoProviderV1, S: KeyStateStore, R: SecureRandom> SoftwareKeyStore<C,
             let seed = Ed25519SigningSeed::from_bytes(seed_bytes);
             seed_bytes.zeroize();
             let public = self.crypto.ed25519_public_from_seed(&seed);
-            if self.records.values().all(|record| {
-                self.crypto.ed25519_public_from_seed(&record.seed) != public
-            }) {
+            if self
+                .records
+                .values()
+                .all(|record| self.crypto.ed25519_public_from_seed(&record.seed) != public)
+            {
                 return Ok((id, Record { purpose, seed }));
             }
         }
@@ -792,7 +794,9 @@ mod tests {
             root(),
         )
         .unwrap();
-        let original = keys.generate(IdentityKeyPurpose::RootAuthorization).unwrap();
+        let original = keys
+            .generate(IdentityKeyPurpose::RootAuthorization)
+            .unwrap();
         assert_eq!(
             keys.generate(IdentityKeyPurpose::AppAuthentication),
             Err(KeyStoreError::Entropy)
@@ -810,8 +814,12 @@ mod tests {
             root(),
         )
         .unwrap();
-        let first = keys.generate(IdentityKeyPurpose::RootAuthorization).unwrap();
-        let second = keys.generate(IdentityKeyPurpose::DeviceAuthentication).unwrap();
+        let first = keys
+            .generate(IdentityKeyPurpose::RootAuthorization)
+            .unwrap();
+        let second = keys
+            .generate(IdentityKeyPurpose::DeviceAuthentication)
+            .unwrap();
         assert!(second.handle() < first.handle());
         let (epoch, snapshot) = keys.store.snapshot_for_test().unwrap();
         let key = sealing_key(&RustCryptoProviderV1, &root(), &[0x64; 16]).unwrap();
@@ -843,7 +851,9 @@ mod tests {
         let state = initial().into_storage();
         let mut keys =
             SoftwareKeyStore::open(RustCryptoProviderV1, state, RepeatedIdRandom, root()).unwrap();
-        let existing = keys.generate(IdentityKeyPurpose::RootAuthorization).unwrap();
+        let existing = keys
+            .generate(IdentityKeyPurpose::RootAuthorization)
+            .unwrap();
         assert_eq!(
             keys.generate(IdentityKeyPurpose::AppAuthentication),
             Err(KeyStoreError::Entropy)
