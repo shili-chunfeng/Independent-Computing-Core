@@ -3,7 +3,7 @@
 Independent Computing Core (ICC) is a portable personal-computing core intended to move from a Linux/VM prototype toward a future minimal OS without making Linux part of the Domain Core contract.
 
 The repository contains the Phase 0 architecture/security baselines, Phase 1
-engineering skeleton, Phase 2 ClassicalV1 cryptographic foundation, and the
+engineering skeleton, Phase 2 ClassicalV1 cryptographic foundation, the
 Phase 3 portable identity-authority state machine, and a proposed Phase 4
 non-exporting software KeyStore for owner review. The KeyStore's durable
 anti-rollback storage Port and seal-root provisioning have no production Linux
@@ -37,7 +37,7 @@ An unmerged branch or PR is not a completed milestone. The next milestone begins
 - The policy validates the declared version requirement, source/path identity, default-feature setting, and requested features independently of whether Cargo activates the edge.
 - Default and all-features locked graphs are checked separately; the all-features feature union must match the reviewed Phase 2 crypto feature policy.
 - The repository dependency policy rejects direct production App dependencies
-  on Identity Core, `icc-crypto-api`, and `icc-crypto-rust`.
+  on Identity Core, `icc-crypto-api`, `icc-crypto-rust`, and `icc-keystore`.
 - Secret wrapper identifiers are additionally guarded by conservative source checks outside the crypto boundary.
 - Fifteen independent `compile_fail` doctests provide compiler-level regression evidence that each of the five secret wrappers implements none of `Clone`, `Copy`, or `Debug`.
 - Source-pattern checks do not expand arbitrary macros and are not Rust AST, compiler, visibility, runtime-sandbox, or formal proofs. The compile-fail tests are compiler checks, but not formal verification.

@@ -20,6 +20,7 @@ The security model is defined primarily by:
 - `docs/Phase_2_Cryptographic_Foundation_v0.1.md`
 - `docs/security/Phase_2_Dependency_Review_v0.1.md`
 - `docs/Phase_3_Identity_Core_v0.1.md`
+- `docs/Phase_4_KeyStore_and_Secret_Operations_v0.1.md`
 
 ## Explicit prototype limits
 
@@ -91,7 +92,7 @@ Security-critical rules include:
 - Linux-specific APIs remain in platform adapters.
 - Domain Core must not directly depend on provider implementation crates.
 - The per-package repository policy rejects direct production App dependencies
-  on `icc-identity-core`, `icc-crypto-api`, and `icc-crypto-rust`.
+  on `icc-identity-core`, `icc-crypto-api`, `icc-crypto-rust`, and `icc-keystore`.
 - `icc-identity-core -> icc-platform-api` is an explicit reviewed Phase 1 Port dependency-inversion edge; it does not authorize a general L2-to-Port dependency rule.
 - `icc-identity-core -> icc-crypto-api` is the reviewed Phase 3 provider-neutral
   signature-verification edge; a Domain-Core dependency on `icc-crypto-rust`
