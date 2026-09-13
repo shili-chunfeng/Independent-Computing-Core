@@ -1,6 +1,8 @@
 #![forbid(unsafe_code)]
 
+use std::cell::RefCell;
 use std::collections::BTreeMap;
+use std::rc::Rc;
 
 use icc_error::PlatformError;
 use icc_platform_api::{
@@ -97,24 +99,48 @@ impl SecurityStateStore for InMemorySecurityStateStore {
 }
 
 /// Fault-injectable trusted Port MODEL. Not a durable Linux implementation.
-/// Keep the adapter across software KeyStore instances to simulate a restart.
+/// Multiple adapters share one simulated namespace; exactly one may own its
+/// lease. The shared inner state survives simulated restarts while an adapter
+/// is retained, but provides no interprocess or hardware guarantees.
 pub struct InMemoryKeyStateStore {
-    namespace: [u8; 16],
-    snapshot: Option<(u64, Vec<u8>)>,
-    trusted_committed: u64,
-    reserved_high_water: u64,
+    shared: Rc<RefCell<SharedKeyState>>,
+    owns_lease: bool,
     fail_next_reservation: bool,
     fail_before_commit: bool,
     fail_after_commit: bool,
 }
 
+struct SharedKeyState {
+    namespace: [u8; 16],
+    snapshot: Option<(u64, Vec<u8>)>,
+    trusted_committed: u64,
+    reserved_high_water: u64,
+    leased: bool,
+}
+
 impl InMemoryKeyStateStore {
-    pub const fn new(namespace: [u8; 16]) -> Self {
+    pub fn new(namespace: [u8; 16]) -> Self {
         Self {
-            namespace,
-            snapshot: None,
-            trusted_committed: 0,
-            reserved_high_water: 0,
+            shared: Rc::new(RefCell::new(SharedKeyState {
+                namespace,
+                snapshot: None,
+                trusted_committed: 0,
+                reserved_high_water: 0,
+                leased: false,
+            })),
+            owns_lease: false,
+            fail_next_reservation: false,
+            fail_before_commit: false,
+            fail_after_commit: false,
+        }
+    }
+
+    /// A separate adapter to the same namespace, with no lease or shared
+    /// fault-injection flags. Useful for concurrent-open and handoff tests.
+    pub fn fork_for_test(&self) -> Self {
+        Self {
+            shared: Rc::clone(&self.shared),
+            owns_lease: false,
             fail_next_reservation: false,
             fail_before_commit: false,
             fail_after_commit: false,
@@ -134,42 +160,79 @@ impl InMemoryKeyStateStore {
     }
 
     pub fn snapshot_for_test(&self) -> Option<(u64, Vec<u8>)> {
-        self.snapshot.clone()
+        self.shared.borrow().snapshot.clone()
     }
 
     pub fn replace_snapshot_for_test(&mut self, snapshot: Option<(u64, Vec<u8>)>) {
-        self.snapshot = snapshot;
+        self.shared.borrow_mut().snapshot = snapshot;
+    }
+}
+
+impl Drop for InMemoryKeyStateStore {
+    fn drop(&mut self) {
+        self.release_exclusive();
     }
 }
 
 impl KeyStateStore for InMemoryKeyStateStore {
+    fn acquire_exclusive(&mut self) -> Result<(), PlatformError> {
+        if self.owns_lease {
+            return Err(PlatformError::AlreadyExists);
+        }
+        let mut state = self.shared.borrow_mut();
+        if state.leased {
+            return Err(PlatformError::Unavailable);
+        }
+        state.leased = true;
+        self.owns_lease = true;
+        Ok(())
+    }
+
+    fn release_exclusive(&mut self) {
+        if self.owns_lease {
+            self.shared.borrow_mut().leased = false;
+            self.owns_lease = false;
+        }
+    }
+
     fn namespace(&self) -> Result<[u8; 16], PlatformError> {
-        Ok(self.namespace)
+        if !self.owns_lease {
+            return Err(PlatformError::PermissionDenied);
+        }
+        Ok(self.shared.borrow().namespace)
     }
 
     fn load(&self) -> Result<Option<(u64, Vec<u8>)>, PlatformError> {
-        match &self.snapshot {
-            Some((epoch, bytes)) if *epoch == self.trusted_committed => {
+        if !self.owns_lease {
+            return Err(PlatformError::PermissionDenied);
+        }
+        let state = self.shared.borrow();
+        match &state.snapshot {
+            Some((epoch, bytes)) if *epoch == state.trusted_committed => {
                 Ok(Some((*epoch, bytes.clone())))
             }
-            None if self.trusted_committed == 0 => Ok(None),
+            None if state.trusted_committed == 0 => Ok(None),
             _ => Err(PlatformError::Corrupt),
         }
     }
 
     fn reserve_epoch(&mut self, expected_committed: u64) -> Result<u64, PlatformError> {
+        if !self.owns_lease {
+            return Err(PlatformError::PermissionDenied);
+        }
         if self.fail_next_reservation {
             self.fail_next_reservation = false;
             return Err(PlatformError::Unavailable);
         }
-        if expected_committed != self.trusted_committed {
+        let mut state = self.shared.borrow_mut();
+        if expected_committed != state.trusted_committed {
             return Err(PlatformError::Corrupt);
         }
-        self.reserved_high_water = self
+        state.reserved_high_water = state
             .reserved_high_water
             .checked_add(1)
             .ok_or(PlatformError::OutOfSpace)?;
-        Ok(self.reserved_high_water)
+        Ok(state.reserved_high_water)
     }
 
     fn commit(
@@ -178,18 +241,22 @@ impl KeyStateStore for InMemoryKeyStateStore {
         reserved_epoch: u64,
         sealed: &[u8],
     ) -> Result<(), PlatformError> {
+        if !self.owns_lease {
+            return Err(PlatformError::PermissionDenied);
+        }
         if self.fail_before_commit {
             self.fail_before_commit = false;
             return Err(PlatformError::Unavailable);
         }
-        if expected_committed != self.trusted_committed
+        let mut state = self.shared.borrow_mut();
+        if expected_committed != state.trusted_committed
             || reserved_epoch <= expected_committed
-            || reserved_epoch != self.reserved_high_water
+            || reserved_epoch != state.reserved_high_water
         {
             return Err(PlatformError::Corrupt);
         }
-        self.snapshot = Some((reserved_epoch, sealed.to_vec()));
-        self.trusted_committed = reserved_epoch;
+        state.snapshot = Some((reserved_epoch, sealed.to_vec()));
+        state.trusted_committed = reserved_epoch;
         if self.fail_after_commit {
             self.fail_after_commit = false;
             return Err(PlatformError::Unavailable);

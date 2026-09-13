@@ -38,8 +38,18 @@ pub trait SecurityStateStore {
 /// restoring an older snapshot, deleting provisioned state, or swapping the
 /// namespace must fail closed. A successful commit must atomically publish the
 /// complete blob AND advance the trusted committed epoch, after durable sync.
-/// The test adapter models this contract; a normal file alone cannot meet it.
+/// A live KeyStore must first acquire an exclusive, non-stealable lease for
+/// its namespace and hold it across every sign, verification, and mutation.
+/// The lease is released when the adapter is dropped or explicitly relinquished
+/// for a handoff. No other adapter for that namespace may successfully acquire
+/// a lease while it is held; an expired/stealable TTL is NOT sufficient because
+/// a stale instance would retain an in-memory signing seed. All methods below
+/// other than acquisition must fail without the lease. Implementations must
+/// release it on drop, including after errors. The test adapter models this
+/// contract; a normal file or process-local mutex alone cannot meet it.
 pub trait KeyStateStore {
+    fn acquire_exclusive(&mut self) -> Result<(), PlatformError>;
+    fn release_exclusive(&mut self);
     fn namespace(&self) -> Result<[u8; 16], PlatformError>;
     fn load(&self) -> Result<Option<(u64, Vec<u8>)>, PlatformError>;
     fn reserve_epoch(&mut self, expected_committed: u64) -> Result<u64, PlatformError>;

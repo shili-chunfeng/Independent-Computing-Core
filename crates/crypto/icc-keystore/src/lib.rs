@@ -28,7 +28,8 @@ use alloc::vec::Vec;
 use core::convert::TryInto;
 
 use icc_crypto_api::{
-    AeadKey32, CryptoError, CryptoProviderV1, Ed25519Signature, Ed25519SigningSeed, Nonce96,
+    AeadKey32, CryptoError, CryptoProviderV1, Ed25519PublicKey, Ed25519Signature,
+    Ed25519SigningSeed, Nonce96,
 };
 use icc_error::PlatformError;
 use icc_identity_core::{IdentityKeyBinding, IdentityKeyPurpose};
@@ -37,13 +38,13 @@ use icc_types::IdentityKeyId;
 use zeroize::Zeroize;
 
 const MAGIC: &[u8; 8] = b"ICCKS4\0\0";
-const VERSION: u16 = 1;
+const VERSION: u16 = 2;
 const HEADER_LEN: usize = 8 + 2 + 16 + 8;
-const RECORD_LEN: usize = 16 + 1 + 32;
+const RECORD_LEN: usize = 16 + 8 + 1 + 32;
 const MAX_KEYS: usize = 128;
 const MAX_SNAPSHOT: usize = HEADER_LEN + 2 + MAX_KEYS * RECORD_LEN + 16;
 const MAX_ID_ATTEMPTS: usize = 8;
-const HKDF_INFO: &[u8] = b"ICC/keystore/state-seal/ClassicalV1/v1";
+const HKDF_INFO: &[u8] = b"ICC/keystore/state-seal/ClassicalV1/v2";
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct KeyHandle([u8; 16]);
@@ -63,6 +64,7 @@ impl KeyHandle {
 pub struct KeyDescriptor {
     handle: KeyHandle,
     binding: IdentityKeyBinding,
+    generation: u64,
 }
 
 impl KeyDescriptor {
@@ -72,6 +74,11 @@ impl KeyDescriptor {
 
     pub const fn binding(&self) -> IdentityKeyBinding {
         self.binding
+    }
+
+    /// Trusted, never-reused issuance epoch for this namespace.
+    pub const fn generation(&self) -> u64 {
+        self.generation
     }
 }
 
@@ -107,12 +114,15 @@ pub trait KeyOperations {
 }
 
 struct Record {
+    generation: u64,
     purpose: IdentityKeyPurpose,
     seed: Ed25519SigningSeed,
 }
 
 /// Software KeyStore. The provider, random source and trusted state Port are
-/// injected; their concrete types never enter Domain Core or an App API.
+/// injected; their concrete types never enter Domain Core or an App API. The
+/// Port's exclusive namespace lease is acquired before load and held while
+/// any in-memory signing seed is usable.
 pub struct SoftwareKeyStore<C, S, R> {
     crypto: C,
     store: S,
@@ -128,10 +138,11 @@ impl<C: CryptoProviderV1, S: KeyStateStore, R: SecureRandom> SoftwareKeyStore<C,
     /// Explicit initial provisioning. Never called implicitly on load failure.
     pub fn provision(
         crypto: C,
-        store: S,
+        mut store: S,
         random: R,
         root: AeadKey32,
     ) -> Result<Self, KeyStoreError> {
+        store.acquire_exclusive().map_err(KeyStoreError::Storage)?;
         let namespace = store.namespace().map_err(KeyStoreError::Storage)?;
         if namespace == [0; 16] {
             return Err(KeyStoreError::Corrupt);
@@ -154,7 +165,8 @@ impl<C: CryptoProviderV1, S: KeyStateStore, R: SecureRandom> SoftwareKeyStore<C,
     }
 
     /// Load only a trusted current snapshot; missing state is never recreated.
-    pub fn open(crypto: C, store: S, random: R, root: AeadKey32) -> Result<Self, KeyStoreError> {
+    pub fn open(crypto: C, mut store: S, random: R, root: AeadKey32) -> Result<Self, KeyStoreError> {
+        store.acquire_exclusive().map_err(KeyStoreError::Storage)?;
         let namespace = store.namespace().map_err(KeyStoreError::Storage)?;
         if namespace == [0; 16] {
             return Err(KeyStoreError::Corrupt);
@@ -179,9 +191,11 @@ impl<C: CryptoProviderV1, S: KeyStateStore, R: SecureRandom> SoftwareKeyStore<C,
         })
     }
 
-    /// Transfer only the storage adapter out for an explicit restart test.
-    /// The sealing key and all owned signing seeds are dropped.
-    pub fn into_storage(self) -> S {
+    /// One-way handoff for an explicit restart test. Release the lease only
+    /// when this instance can perform no further operation; all owned signing
+    /// seeds and the sealing root are then dropped.
+    pub fn into_storage(mut self) -> S {
+        self.store.release_exclusive();
         self.store
     }
 
@@ -196,7 +210,8 @@ impl<C: CryptoProviderV1, S: KeyStateStore, R: SecureRandom> SoftwareKeyStore<C,
             .records
             .get(&descriptor.binding.id())
             .ok_or(KeyStoreError::NotFound)?;
-        if record.purpose != descriptor.binding.purpose()
+        if record.generation != descriptor.generation
+            || record.purpose != descriptor.binding.purpose()
             || self.crypto.ed25519_public_from_seed(&record.seed) != descriptor.binding.public_key()
         {
             return Err(KeyStoreError::BindingMismatch);
@@ -247,7 +262,14 @@ impl<C: CryptoProviderV1, S: KeyStateStore, R: SecureRandom> SoftwareKeyStore<C,
                 .values()
                 .all(|record| self.crypto.ed25519_public_from_seed(&record.seed) != public)
             {
-                return Ok((id, Record { purpose, seed }));
+                return Ok((
+                    id,
+                    Record {
+                        generation: 0,
+                        purpose,
+                        seed,
+                    },
+                ));
             }
         }
         seed_bytes.zeroize();
@@ -262,15 +284,18 @@ impl<C: CryptoProviderV1, S: KeyStateStore, R: SecureRandom> SoftwareKeyStore<C,
                 record.purpose,
                 self.crypto.ed25519_public_from_seed(&record.seed),
             ),
+            generation: record.generation,
         }
     }
 
     /// Atomically write the next complete state, excluding a removed/rotated
-    /// key and optionally including a new one. Never mutate live records here.
+    /// key and optionally including a new one. Stamp a newly issued record
+    /// with the reserved never-reused epoch before sealing. Never mutate live
+    /// records here until the durable commit succeeds.
     fn persist(
         &mut self,
         excluded: Option<IdentityKeyId>,
-        included: Option<(IdentityKeyId, &Record)>,
+        mut included: Option<(IdentityKeyId, &mut Record)>,
     ) -> Result<(), KeyStoreError> {
         if self.poisoned {
             return Err(KeyStoreError::Unavailable);
@@ -285,6 +310,10 @@ impl<C: CryptoProviderV1, S: KeyStateStore, R: SecureRandom> SoftwareKeyStore<C,
         if reserved <= self.committed {
             return Err(KeyStoreError::Corrupt);
         }
+        if let Some((_, record)) = &mut included {
+            record.generation = reserved;
+        }
+        let included = included.as_ref().map(|(id, record)| (*id, &**record));
         let count =
             self.records.len() - usize::from(excluded.is_some()) + usize::from(included.is_some());
         if count > MAX_KEYS {
@@ -333,8 +362,8 @@ impl<C: CryptoProviderV1, S: KeyStateStore, R: SecureRandom> KeyOperations
     for SoftwareKeyStore<C, S, R>
 {
     fn generate(&mut self, purpose: IdentityKeyPurpose) -> Result<KeyDescriptor, KeyStoreError> {
-        let (id, record) = self.new_record(purpose)?;
-        self.persist(None, Some((id, &record)))?;
+        let (id, mut record) = self.new_record(purpose)?;
+        self.persist(None, Some((id, &mut record)))?;
         let descriptor = self.descriptor(id, &record);
         self.records.insert(id, record);
         Ok(descriptor)
@@ -357,8 +386,8 @@ impl<C: CryptoProviderV1, S: KeyStateStore, R: SecureRandom> KeyOperations
 
     fn rotate(&mut self, current: KeyDescriptor) -> Result<KeyDescriptor, KeyStoreError> {
         self.current_record(current)?;
-        let (id, record) = self.new_record(current.binding.purpose())?;
-        self.persist(Some(current.binding.id()), Some((id, &record)))?;
+        let (id, mut record) = self.new_record(current.binding.purpose())?;
+        self.persist(Some(current.binding.id()), Some((id, &mut record)))?;
         self.records.remove(&current.binding.id());
         let descriptor = self.descriptor(id, &record);
         self.records.insert(id, record);
@@ -375,6 +404,7 @@ impl<C: CryptoProviderV1, S: KeyStateStore, R: SecureRandom> KeyOperations
 
 fn append_record(out: &mut Vec<u8>, id: IdentityKeyId, record: &Record) {
     out.extend_from_slice(id.as_bytes());
+    out.extend_from_slice(&record.generation.to_be_bytes());
     out.push(record.purpose as u8);
     out.extend_from_slice(record.seed.expose_secret());
 }
@@ -463,12 +493,21 @@ fn decode<C: CryptoProviderV1>(
             CryptoError::AuthenticationFailed => KeyStoreError::Corrupt,
             _ => KeyStoreError::Crypto,
         })?;
-    let result = parse_records(&plaintext);
+    let result = parse_records(&plaintext, epoch, |seed| {
+        crypto.ed25519_public_from_seed(seed)
+    });
     plaintext.as_mut_slice().zeroize();
     result
 }
 
-fn parse_records(plaintext: &[u8]) -> Result<BTreeMap<IdentityKeyId, Record>, KeyStoreError> {
+fn parse_records<F>(
+    plaintext: &[u8],
+    epoch: u64,
+    public_from_seed: F,
+) -> Result<BTreeMap<IdentityKeyId, Record>, KeyStoreError>
+where
+    F: Fn(&Ed25519SigningSeed) -> Ed25519PublicKey,
+{
     if plaintext.len() < 2 {
         return Err(KeyStoreError::Corrupt);
     }
@@ -491,15 +530,44 @@ fn parse_records(plaintext: &[u8]) -> Result<BTreeMap<IdentityKeyId, Record>, Ke
             return Err(KeyStoreError::Corrupt);
         }
         previous = Some(id);
-        let purpose = purpose_from_byte(record[16]).ok_or(KeyStoreError::Corrupt)?;
-        let mut bytes: [u8; 32] = record[17..]
-            .try_into()
-            .map_err(|_| KeyStoreError::Corrupt)?;
-        let seed = Ed25519SigningSeed::from_bytes(bytes);
-        bytes.zeroize();
-        if records.insert(id, Record { purpose, seed }).is_some() {
+        let generation = u64::from_be_bytes(
+            record[16..24]
+                .try_into()
+                .map_err(|_| KeyStoreError::Corrupt)?,
+        );
+        if generation == 0
+            || generation > epoch
+            || records
+                .values()
+                .any(|existing: &Record| existing.generation == generation)
+        {
             return Err(KeyStoreError::Corrupt);
         }
+        let purpose = purpose_from_byte(record[24]).ok_or(KeyStoreError::Corrupt)?;
+        let mut bytes: [u8; 32] = record[25..]
+            .try_into()
+            .map_err(|_| KeyStoreError::Corrupt)?;
+        if bytes == [0; 32] {
+            bytes.zeroize();
+            return Err(KeyStoreError::Corrupt);
+        }
+        let seed = Ed25519SigningSeed::from_bytes(bytes);
+        bytes.zeroize();
+        let public = public_from_seed(&seed);
+        if records.values().any(|existing| {
+            existing.seed.expose_secret() == seed.expose_secret()
+                || public_from_seed(&existing.seed) == public
+        }) {
+            return Err(KeyStoreError::Corrupt);
+        }
+        let _ = records.insert(
+            id,
+            Record {
+                generation,
+                purpose,
+                seed,
+            },
+        );
     }
     Ok(records)
 }
@@ -516,6 +584,28 @@ mod tests {
 
     fn storage() -> InMemoryKeyStateStore {
         InMemoryKeyStateStore::new([0x64; 16])
+    }
+
+    fn test_record(id: u8, generation: u64, purpose: u8, seed: u8) -> [u8; RECORD_LEN] {
+        let mut record = [0_u8; RECORD_LEN];
+        record[0] = id;
+        record[16..24].copy_from_slice(&generation.to_be_bytes());
+        record[24] = purpose;
+        record[25..].fill(seed);
+        record
+    }
+
+    fn test_payload(records: &[[u8; RECORD_LEN]]) -> Vec<u8> {
+        let mut bytes = Vec::with_capacity(2 + records.len() * RECORD_LEN);
+        bytes.extend_from_slice(&(records.len() as u16).to_be_bytes());
+        for record in records {
+            bytes.extend_from_slice(record);
+        }
+        bytes
+    }
+
+    fn parse_test(bytes: &[u8], epoch: u64) -> Result<BTreeMap<IdentityKeyId, Record>, KeyStoreError> {
+        parse_records(bytes, epoch, |seed| RustCryptoProviderV1.ed25519_public_from_seed(seed))
     }
 
     fn initial()
@@ -586,6 +676,7 @@ mod tests {
         let substitute = KeyDescriptor {
             handle: root_key.handle(),
             binding: app_key.binding(),
+            generation: root_key.generation(),
         };
         assert_eq!(
             keys.sign(substitute, b"x"),
@@ -598,6 +689,7 @@ mod tests {
                 IdentityKeyPurpose::AppAuthentication,
                 root_key.binding().public_key(),
             ),
+            generation: root_key.generation(),
         };
         assert_eq!(
             keys.sign(wrong_purpose, b"x"),
@@ -610,6 +702,7 @@ mod tests {
                 IdentityKeyPurpose::RootAuthorization,
                 app_key.binding().public_key(),
             ),
+            generation: root_key.generation(),
         };
         assert_eq!(
             keys.verify_binding(wrong_public),
@@ -622,6 +715,7 @@ mod tests {
                 IdentityKeyPurpose::RootAuthorization,
                 root_key.binding().public_key(),
             ),
+            generation: root_key.generation(),
         };
         assert_eq!(keys.sign(missing, b"x"), Err(KeyStoreError::NotFound));
     }
@@ -864,29 +958,225 @@ mod tests {
     }
 
     #[test]
+    fn destroyed_descriptor_never_revives_when_id_and_seed_repeat_after_restart() {
+        let state = initial().into_storage();
+        let mut keys =
+            SoftwareKeyStore::open(RustCryptoProviderV1, state, RepeatedIdRandom, root()).unwrap();
+        let old = keys.generate(IdentityKeyPurpose::RootAuthorization).unwrap();
+        keys.destroy(old).unwrap();
+        let replacement = keys.generate(IdentityKeyPurpose::RootAuthorization).unwrap();
+        assert_eq!(old.handle(), replacement.handle());
+        assert_eq!(old.binding(), replacement.binding());
+        assert_ne!(old.generation(), replacement.generation());
+        assert_eq!(keys.sign(old, b"revoked"), Err(KeyStoreError::BindingMismatch));
+        assert!(keys.sign(replacement, b"current").is_ok());
+
+        let state = keys.into_storage();
+        let restored =
+            SoftwareKeyStore::open(RustCryptoProviderV1, state, RepeatedIdRandom, root()).unwrap();
+        assert_eq!(restored.sign(old, b"revoked"), Err(KeyStoreError::BindingMismatch));
+        restored.verify_binding(replacement).unwrap();
+    }
+
+    struct ScriptedRandom {
+        next_id: u8,
+    }
+
+    impl SecureRandom for ScriptedRandom {
+        fn fill(&mut self, output: &mut [u8]) -> Result<(), PlatformError> {
+            if output.len() == 16 {
+                output.fill(self.next_id);
+            } else {
+                output.fill(self.next_id + 1);
+                self.next_id += 2;
+            }
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn rotated_descriptor_cannot_revive_after_old_id_and_seed_are_reissued() {
+        let state = initial().into_storage();
+        let mut keys = SoftwareKeyStore::open(
+            RustCryptoProviderV1,
+            state,
+            ScriptedRandom { next_id: 1 },
+            root(),
+        )
+        .unwrap();
+        let old = keys.generate(IdentityKeyPurpose::DeviceAuthentication).unwrap();
+        let rotated = keys.rotate(old).unwrap();
+        assert_ne!(old.binding(), rotated.binding());
+        keys.random.next_id = 1;
+        let repeated = keys.generate(IdentityKeyPurpose::DeviceAuthentication).unwrap();
+        assert_eq!(old.binding(), repeated.binding());
+        assert_ne!(old.generation(), repeated.generation());
+        assert_eq!(keys.sign(old, b"old"), Err(KeyStoreError::BindingMismatch));
+        let state = keys.into_storage();
+        let restored = SoftwareKeyStore::open(
+            RustCryptoProviderV1,
+            state,
+            ScriptedRandom { next_id: 7 },
+            root(),
+        )
+        .unwrap();
+        assert_eq!(restored.sign(old, b"old"), Err(KeyStoreError::BindingMismatch));
+        assert!(restored.sign(repeated, b"new").is_ok());
+    }
+
+    #[test]
+    fn exclusive_lease_prevents_parallel_stale_signing_across_destroy_and_rotate() {
+        let mut owner = initial();
+        let old = owner.generate(IdentityKeyPurpose::DeviceAuthentication).unwrap();
+        let contender = owner.store.fork_for_test();
+        assert!(matches!(
+            SoftwareKeyStore::open(RustCryptoProviderV1, contender, ZeroRandom, root()),
+            Err(KeyStoreError::Storage(PlatformError::Unavailable))
+        ));
+        owner.destroy(old).unwrap();
+        let contender = owner.store.fork_for_test();
+        assert!(matches!(
+            SoftwareKeyStore::open(RustCryptoProviderV1, contender, ZeroRandom, root()),
+            Err(KeyStoreError::Storage(PlatformError::Unavailable))
+        ));
+        let contender = owner.store.fork_for_test();
+        drop(owner);
+        let next =
+            SoftwareKeyStore::open(RustCryptoProviderV1, contender, ZeroRandom, root()).unwrap();
+        assert_eq!(next.sign(old, b"stale"), Err(KeyStoreError::NotFound));
+
+        let state = next.into_storage();
+        let mut owner = SoftwareKeyStore::open(
+            RustCryptoProviderV1,
+            state,
+            DeterministicRandom::new(40),
+            root(),
+        )
+        .unwrap();
+        let old = owner.generate(IdentityKeyPurpose::AppAuthentication).unwrap();
+        let contender = owner.store.fork_for_test();
+        let current = owner.rotate(old).unwrap();
+        assert!(matches!(
+            SoftwareKeyStore::open(RustCryptoProviderV1, contender, ZeroRandom, root()),
+            Err(KeyStoreError::Storage(PlatformError::Unavailable))
+        ));
+        let contender = owner.store.fork_for_test();
+        drop(owner);
+        let next =
+            SoftwareKeyStore::open(RustCryptoProviderV1, contender, ZeroRandom, root()).unwrap();
+        assert_eq!(next.sign(old, b"stale"), Err(KeyStoreError::NotFound));
+        next.verify_binding(current).unwrap();
+    }
+
+    #[test]
+    fn failed_open_releases_lease_without_unprovisioned_recreation() {
+        let state = initial().into_storage();
+        let contender = state.fork_for_test();
+        assert!(matches!(
+            SoftwareKeyStore::open(
+                RustCryptoProviderV1,
+                state,
+                ZeroRandom,
+                AeadKey32::from_bytes([0x22; 32])
+            ),
+            Err(KeyStoreError::Corrupt)
+        ));
+        let reopened =
+            SoftwareKeyStore::open(RustCryptoProviderV1, contender, ZeroRandom, root()).unwrap();
+        assert!(reopened.records.is_empty());
+    }
+
+    #[test]
     fn decoder_rejects_truncation_count_purpose_duplicate_and_extra_bytes() {
-        assert!(parse_records(&[]).is_err());
-        assert!(parse_records(&[0, 1]).is_err());
-        let mut record = alloc::vec![0; 2 + RECORD_LEN];
-        record[1] = 1;
-        record[2] = 7;
-        record[18] = 1;
-        assert!(parse_records(&record).is_ok());
-        record[18] = 255;
-        assert!(parse_records(&record).is_err());
-        record[18] = 1;
+        assert!(parse_test(&[], 3).is_err());
+        assert!(parse_test(&[0, 1], 3).is_err());
+        let mut record = test_payload(&[test_record(7, 2, 1, 9)]);
+        assert!(parse_test(&record, 3).is_ok());
+        record[26] = 255;
+        assert!(parse_test(&record, 3).is_err());
+        record[26] = 1;
         record.extend_from_within(2..);
         record[1] = 2;
-        assert!(parse_records(&record).is_err());
+        assert!(parse_test(&record, 3).is_err());
         record.push(1);
-        assert!(parse_records(&record).is_err());
-        let mut unsorted = alloc::vec![0; 2 + 2 * RECORD_LEN];
-        unsorted[1] = 2;
-        unsorted[2] = 9;
-        unsorted[18] = 1;
-        unsorted[2 + RECORD_LEN] = 7;
-        unsorted[18 + RECORD_LEN] = 2;
-        assert!(parse_records(&unsorted).is_err());
+        assert!(parse_test(&record, 3).is_err());
+        assert!(parse_test(&test_payload(&[
+            test_record(9, 2, 1, 7),
+            test_record(7, 3, 2, 8),
+        ]), 3).is_err());
+    }
+
+    #[test]
+    fn decoder_rejects_zero_seed_duplicate_seed_public_and_generation() {
+        let zero = test_payload(&[test_record(1, 2, 1, 0)]);
+        assert!(parse_test(&zero, 3).is_err());
+        let duplicate_seed = test_payload(&[
+            test_record(1, 2, 1, 7),
+            test_record(2, 3, 2, 7),
+        ]);
+        assert!(parse_test(&duplicate_seed, 3).is_err());
+        let duplicate_generation = test_payload(&[
+            test_record(1, 2, 1, 7),
+            test_record(2, 2, 2, 8),
+        ]);
+        assert!(parse_test(&duplicate_generation, 3).is_err());
+        assert!(parse_test(&test_payload(&[test_record(1, 0, 1, 7)]), 3).is_err());
+        assert!(parse_test(&test_payload(&[test_record(1, 4, 1, 7)]), 3).is_err());
+        let different_seeds = test_payload(&[
+            test_record(1, 2, 1, 7),
+            test_record(2, 3, 2, 8),
+        ]);
+        assert!(parse_test(&different_seeds, 3).is_ok());
+        assert!(parse_records(&different_seeds, 3, |_| {
+            Ed25519PublicKey::from_bytes([42; 32])
+        })
+        .is_err());
+
+        let mut keys = initial();
+        let _ = keys.generate(IdentityKeyPurpose::RootAuthorization).unwrap();
+        let _ = keys.generate(IdentityKeyPurpose::DeviceAuthentication).unwrap();
+        let mut state = keys.into_storage();
+        let epoch = state.snapshot_for_test().unwrap().0;
+        for payload in [&zero, &duplicate_seed] {
+            let sealed = seal(&RustCryptoProviderV1, &root(), [0x64; 16], epoch, payload).unwrap();
+            state.replace_snapshot_for_test(Some((epoch, sealed)));
+            let attempt = SoftwareKeyStore::open(
+                RustCryptoProviderV1,
+                state.fork_for_test(),
+                ZeroRandom,
+                root(),
+            );
+            assert!(matches!(attempt, Err(KeyStoreError::Corrupt)));
+        }
+    }
+
+    #[test]
+    fn authenticated_v1_snapshot_is_rejected_without_implicit_migration() {
+        let mut state = initial().into_storage();
+        let epoch = state.snapshot_for_test().unwrap().0;
+        let mut aad = header([0x64; 16], epoch);
+        aad[8..10].copy_from_slice(&1_u16.to_be_bytes());
+        let old_info = b"ICC/keystore/state-seal/ClassicalV1/v1";
+        let derived = RustCryptoProviderV1
+            .hkdf_sha256_32(&[0x64; 16], root().expose_secret(), old_info)
+            .unwrap();
+        let mut bytes = *derived.expose_secret();
+        let key = AeadKey32::from_bytes(bytes);
+        bytes.zeroize();
+        let ciphertext = RustCryptoProviderV1
+            .chacha20poly1305_seal(&key, nonce(epoch), &aad, &[0, 0])
+            .unwrap();
+        aad.extend_from_slice(&ciphertext);
+        state.replace_snapshot_for_test(Some((epoch, aad)));
+        let other = state.fork_for_test();
+        assert!(matches!(
+            SoftwareKeyStore::open(RustCryptoProviderV1, state, ZeroRandom, root()),
+            Err(KeyStoreError::Corrupt)
+        ));
+        assert!(matches!(
+            SoftwareKeyStore::provision(RustCryptoProviderV1, other, ZeroRandom, root()),
+            Err(KeyStoreError::AlreadyProvisioned)
+        ));
     }
 
     #[test]
@@ -900,7 +1190,7 @@ mod tests {
                 state ^= state << 5;
                 *byte = state as u8;
             }
-            if let Ok(parsed) = parse_records(&input) {
+            if let Ok(parsed) = parse_test(&input, u64::MAX) {
                 assert!(parsed.len() <= MAX_KEYS);
                 assert_eq!(input.len(), 2 + parsed.len() * RECORD_LEN);
             }
