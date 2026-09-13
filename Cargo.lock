@@ -205,6 +205,9 @@ name = "icc-architecture-tests"
 version = "0.2.0"
 dependencies = [
  "icc-capability-core",
+ "icc-crypto-api",
+ "icc-crypto-rust",
+ "icc-error",
  "icc-identity-core",
  "icc-platform-api",
  "icc-rights",
@@ -248,6 +251,7 @@ version = "0.2.0"
 name = "icc-identity-core"
 version = "0.2.0"
 dependencies = [
+ "icc-crypto-api",
  "icc-error",
  "icc-platform-api",
  "icc-types",
@@ -293,7 +297,6 @@ name = "indie-cli"
 version = "0.2.0"
 dependencies = [
  "icc-capability-core",
- "icc-identity-core",
  "icc-platform-api",
  "icc-platform-linux",
  "icc-rights",

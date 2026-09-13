@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Phase 2 architecture and dependency-boundary guard.
+"""Phase 3 architecture and dependency-boundary guard.
 
 This checker combines conservative source-pattern analysis with both the
 default and all-features graphs from ``cargo metadata --locked``. Manifest
@@ -143,8 +143,10 @@ def registry_dependency(
 # version requirement, default-feature semantics, and requested feature set.
 # Anything else fails closed.
 #
-# ``icc-identity-core -> icc-platform-api`` is the explicit reviewed Phase 1
-# Port dependency-inversion exception; it does not widen other L2 policies.
+# ``icc-identity-core -> icc-platform-api`` is the reviewed Phase 1 Port
+# dependency-inversion exception. Phase 3 adds the reviewed dependency on the
+# provider-neutral crypto API for signature verification; Domain Core still
+# cannot depend on a concrete crypto provider.
 PACKAGE_DECLARATION_POLICY: dict[str, frozenset[DependencyDeclaration]] = {
     "icc-types": frozenset(),
     "icc-error": frozenset(),
@@ -158,6 +160,7 @@ PACKAGE_DECLARATION_POLICY: dict[str, frozenset[DependencyDeclaration]] = {
     ),
     "icc-identity-core": frozenset(
         {
+            path_dependency("icc-crypto-api"),
             path_dependency("icc-error"),
             path_dependency("icc-platform-api"),
             path_dependency("icc-types"),
@@ -212,7 +215,6 @@ PACKAGE_DECLARATION_POLICY: dict[str, frozenset[DependencyDeclaration]] = {
     "indie-cli": frozenset(
         {
             path_dependency("icc-capability-core"),
-            path_dependency("icc-identity-core"),
             path_dependency("icc-platform-api"),
             path_dependency("icc-platform-linux"),
             path_dependency("icc-rights"),
@@ -222,6 +224,9 @@ PACKAGE_DECLARATION_POLICY: dict[str, frozenset[DependencyDeclaration]] = {
     "icc-architecture-tests": frozenset(
         {
             path_dependency("icc-capability-core"),
+            path_dependency("icc-crypto-api"),
+            path_dependency("icc-crypto-rust"),
+            path_dependency("icc-error"),
             path_dependency("icc-identity-core"),
             path_dependency("icc-platform-api"),
             path_dependency("icc-rights"),

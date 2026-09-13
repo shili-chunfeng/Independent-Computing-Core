@@ -1,8 +1,10 @@
-# Independent Computing Core — Phase 2 Cryptographic Foundation
+# Independent Computing Core — Phase 3 Identity Core
 
 Independent Computing Core (ICC) is a portable personal-computing core intended to move from a Linux/VM prototype toward a future minimal OS without making Linux part of the Domain Core contract.
 
-The repository currently contains the Phase 0 architecture/security baselines, Phase 1 engineering skeleton, and Phase 2 ClassicalV1 cryptographic foundation. **Phase 3 has not started.**
+The repository contains the Phase 0 architecture/security baselines, Phase 1
+engineering skeleton, Phase 2 ClassicalV1 cryptographic foundation, and the
+Phase 3 portable identity-authority state machine.
 
 ## Mandatory project execution contract
 
@@ -25,12 +27,14 @@ An unmerged branch or PR is not a completed milestone. The next milestone begins
 - Domain/Core crates are `no_std` where required by Phase 0.3.
 - OS effects enter through narrow Port traits.
 - Linux-specific code is isolated in Linux adapters.
-- Domain Core does not directly depend on crypto-provider implementation crates.
+- Domain Core does not directly depend on crypto-provider implementation crates;
+  Identity Core uses only the provider-neutral verification API.
 - Local authorization remains authority-side; UI/CLI is not a security authority.
 - Every workspace package has a fail-closed allowlist for all direct dependency declarations, including optional, dev, build, target-specific, path, registry, and renamed declarations.
 - The policy validates the declared version requirement, source/path identity, default-feature setting, and requested features independently of whether Cargo activates the edge.
 - Default and all-features locked graphs are checked separately; the all-features feature union must match the reviewed Phase 2 crypto feature policy.
-- The current repository dependency policy rejects direct production App dependencies on `icc-crypto-api` and `icc-crypto-rust`.
+- The repository dependency policy rejects direct production App dependencies
+  on Identity Core, `icc-crypto-api`, and `icc-crypto-rust`.
 - Secret wrapper identifiers are additionally guarded by conservative source checks outside the crypto boundary.
 - Fifteen independent `compile_fail` doctests provide compiler-level regression evidence that each of the five secret wrappers implements none of `Clone`, `Copy`, or `Debug`.
 - Source-pattern checks do not expand arbitrary macros and are not Rust AST, compiler, visibility, runtime-sandbox, or formal proofs. The compile-fail tests are compiler checks, but not formal verification.
@@ -57,6 +61,23 @@ AEAD:          ChaCha20-Poly1305
 ```
 
 `Argon2idV13` currently has a stable algorithm identifier only; password-derived key handling is intentionally not implemented in Phase 2.
+
+## Phase 3 identity model
+
+- The root-domain identifier and root key reference are private authority state,
+  not an App login identifier.
+- Every App receives an independently random pseudonym and a distinct
+  `AppAuthentication` public-key binding.
+- Device enrollment, device/App key rotation, revocation, and recovery approval
+  use versioned, domain-separated Ed25519 authorization transcripts.
+- Device revocation requires a different active device. Recovery uses a bounded
+  M-of-N authority policy with a minimum threshold of two.
+- Successful recovery rotates the root binding, revokes old devices, cancels
+  pending enrollments, and suspends active App identities until a new-device
+  authorization rotates their keys.
+- The crate is a `no_std + alloc` domain state machine. It does not yet provide
+  private-key storage, caller-bound IPC, durable persistence, rollback defense,
+  recovery notification transport, or a network identity protocol.
 
 ## Verification commands
 
@@ -93,6 +114,7 @@ cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 cargo test --workspace --locked
 cargo test -p icc-crypto-api --doc --locked
+cargo test -p icc-identity-core --doc --locked
 cargo test --workspace --all-features --locked
 
 # Bare-metal no_std portability checks
@@ -128,7 +150,10 @@ cargo run -p indie-cli --locked -- doctor
 cargo run -p indie-cli --locked -- demo
 ```
 
-The CLI deliberately does not depend directly on the internal crypto API/provider. Secret cryptographic operations remain exercised in provider tests; this Phase 2 hardening work does not invent a facade, service, Identity feature, or Phase 4 KeyStore merely to preserve a crypto CLI demo.
+The CLI deliberately has no dependency on Identity Core or the internal crypto
+API/provider, and prints no root identity identifier. The authority-side
+identity state machine is exercised through integration tests until a later
+caller-bound service/API exists.
 
 ## Security and design documents
 
@@ -141,6 +166,8 @@ The CLI deliberately does not depend directly on the internal crypto API/provide
 - `docs/Phase_2_Cryptographic_Foundation_v0.1.md`
 - `docs/security/Phase_2_Dependency_Review_v0.1.md`
 - `docs/Phase_2_Cryptographic_Hardening_Report_v0.1.md`
-- `docs/adr/ADR-0001` through `ADR-0006`
+- `docs/Phase_3_Identity_Core_v0.1.md`
+- `docs/Phase_3_Identity_Core_Completion_Report_v0.1.md`
+- `docs/adr/ADR-0001` through proposed `ADR-0007`
 
 This is a prototype architecture/security baseline, not a production security product. See `SECURITY.md` for explicit non-claims and remaining reporting/governance risks.

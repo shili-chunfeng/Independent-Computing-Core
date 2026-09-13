@@ -21,6 +21,13 @@ macro_rules! opaque_id {
 }
 
 opaque_id!(IdentityId, 16);
+opaque_id!(IdentityDomainId, 32);
+opaque_id!(IdentityKeyId, 16);
+opaque_id!(DeviceId, 16);
+opaque_id!(EnrollmentId, 16);
+opaque_id!(RecoveryAttemptId, 16);
+opaque_id!(RecoveryAuthorityId, 16);
+opaque_id!(AppPseudonymId, 32);
 opaque_id!(AppId, 16);
 opaque_id!(ObjectId, 16);
 opaque_id!(SecurityStateKey, 32);

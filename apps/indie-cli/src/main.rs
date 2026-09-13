@@ -4,9 +4,8 @@ use std::env;
 use std::process::ExitCode;
 
 use icc_capability_core::{AccessRequest, AuthorizationDecision, CapabilityGrant, authorize};
-use icc_identity_core::provision_local_identity_id;
 use icc_platform_api::Clock;
-use icc_platform_linux::{LinuxClock, LinuxSecureRandom};
+use icc_platform_linux::LinuxClock;
 use icc_rights::Rights;
 use icc_types::{AppId, Generation, MonotonicMs, ObjectId};
 
@@ -31,7 +30,7 @@ fn doctor() -> ExitCode {
         }
     };
 
-    println!("architecture: phase2");
+    println!("architecture: phase3");
     println!("crypto_profile: classical-v1");
     println!("platform: linux");
     println!("wall_time_ms: {}", wall.get());
@@ -40,15 +39,6 @@ fn doctor() -> ExitCode {
 }
 
 fn demo() -> ExitCode {
-    let mut random = LinuxSecureRandom;
-    let identity = match provision_local_identity_id(&mut random) {
-        Ok(value) => value,
-        Err(error) => {
-            eprintln!("identity provisioning failed: {error}");
-            return ExitCode::FAILURE;
-        }
-    };
-
     let app = AppId::from_bytes([0xA1; 16]);
     let object = ObjectId::from_bytes([0xB2; 16]);
     let grant = CapabilityGrant {
@@ -67,7 +57,6 @@ fn demo() -> ExitCode {
 
     let decision = authorize(&grant, &request, MonotonicMs::new(1), Generation::new(1));
 
-    println!("identity_id: {:02x?}", identity.id.as_bytes());
     println!("capability_read_decision: {decision:?}");
 
     if decision == AuthorizationDecision::Allow {
