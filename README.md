@@ -8,6 +8,10 @@ Phase 3 portable identity-authority state machine, and a proposed Phase 4
 non-exporting software KeyStore for owner review. The KeyStore's durable
 anti-rollback storage Port and seal-root provisioning have no production Linux
 implementation yet; see `docs/Phase_4_KeyStore_and_Secret_Operations_v0.1.md`.
+PR #4's review remediation proposes an exclusive namespace lease and a v2
+snapshot with never-reused issuance generations. Check the PR's latest HEAD
+and push/PR CI before relying on test claims; v1 has no automatic migration
+path and no production cross-process lease backend exists.
 
 ## Mandatory project execution contract
 

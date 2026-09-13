@@ -1,7 +1,7 @@
 # Independent Computing Core
 ## Phase 4 — KeyStore & Secret Operations Completion Report v0.1
 
-- **Status:** Pre-review evidence record
+- **Status:** PR #4 security remediation in progress; new HEAD **NOT VERIFIED**
 - **Base HEAD:** `ed4fc74fa33813c8663e22c7824e5dafb3ec7b4e`
 - **Branch:** `phase-4-keystore`
 - **Evidence branch HEAD:** `ff55b5d74072caf6501651eb37bd2e1dc9fbd600`
@@ -9,9 +9,10 @@
 - **Review date:** 2026-09-13
 - **Merge status:** **NOT MERGED**
 
-The evidence HEAD is the last implementation commit before this report. The
-final report/PR HEAD and its latest CI run belong in the PR, because adding
-either to this file creates a new HEAD and another required run.
+The evidence HEAD and runs below belong to the original PR implementation,
+**before** the review findings described here. They must not be cited as proof
+that this remediation passed. The final remediation HEAD and its latest CI
+belong in the PR because adding them here creates a new HEAD and another run.
 
 ## Source of truth and milestone
 
@@ -37,6 +38,10 @@ policy/lockfile, relevant code/tests, CI, README, and SECURITY.
 - Versioned and bounded ChaCha20-Poly1305 sealed security snapshots, a
   per-namespace HKDF key, authenticated epoch/namespace, canonical sorted
   records, fail-closed decoding, and instance poisoning after ambiguous writes.
+- Review remediation proposed on this branch: descriptor issuance generation
+  from trusted never-reused epoch, exclusive namespace lease held through
+  signing and revocation, v2 snapshot with explicit v1 rejection, and stronger
+  decoder invariants. **New-head CI evidence is pending.**
 
 Changed paths:
 
@@ -70,6 +75,8 @@ actual caller and authorize every operation.
 |---|---|
 | T-ID-001, INV-007 | no private export API; signing seed stays in owned secret wrapper; compile-fail regressions for export/descriptor seed |
 | T-ID-002 | distinct handles and public keys, exact purpose/public/seed binding; negative substitution/collision tests |
+| T-CAP-002, T-CAP-004, INV-004 | proposed persisted issuance generation prevents destroyed descriptor ABA, including repeated ID and seed; latest tests NOT VERIFIED |
+| T-CAP-007 | proposed exclusive lifetime Port lease excludes stale parallel signers; cross-process adapter NOT IMPLEMENTED |
 | T-VLT-005, INV-011 | authenticated epoch and namespace plus Port freshness contract; **no production anti-rollback adapter** |
 | T-VLT-006, INV-012 | complete commit before visibility, fail-closed parser/load, poisoned instance after ambiguous commit |
 | T-PLT-004 | injected entropy, zero-entropy and collision exhaustion deny |
@@ -96,7 +103,8 @@ repository's pinned Rust 1.98.1 formatting, default/all-features metadata,
 dependency inventories, architecture checks, workspace checks, Clippy, tests,
 compile-fail doctests, bare-metal checks, cargo-deny and repeated locked
 release builds. The full push run below passed at the exact implementation
-HEAD. Its decoded job log confirms all named steps completed successfully.
+HEAD. Its decoded job log confirms all named steps completed successfully **at
+that older HEAD only**. The new remediation has no passing Rust CI yet.
 
 - [Full successful push run 34739252811](https://github.com/shili-chunfeng/Independent-Computing-Core/actions/runs/34739252811),
   head `ff55b5d74072caf6501651eb37bd2e1dc9fbd600`, conclusion `success`.
@@ -106,10 +114,13 @@ HEAD. Its decoded job log confirms all named steps completed successfully.
   #34739206957) and strict Clippy (#34739036115, #34739159129); those are
   repair evidence, not completion evidence.
 - Latest report/PR HEAD run: recorded in PR after this report commit.
+- Remediation push/PR runs: **NOT VERIFIED until the new HEAD jobs complete**.
 
 ## Tests passed and NOT VERIFIED
 
-The KeyStore has 11 unit tests and two compiler-level compile-fail doctests.
+The original KeyStore had 11 passing unit tests and two compiler-level
+compile-fail doctests at the prior HEAD. The new ABA, lease, v1 migration, and
+authenticated malformed-snapshot tests are **NOT VERIFIED** until new CI.
 Cases cover Ed25519 sign/verify and restart, exact binding substitution,
 rotation/destruction before success, crash before/after commit, stale/tampered
 snapshot, wrong root, entropy failure, duplicate public key, handle collision,
@@ -129,11 +140,17 @@ side-channel resistance; exhaustive third-party unsafe review.
 The test Port deliberately models trusted freshness in memory only. Ordinary
 filesystem copies cannot fulfill its contract: a copied older sealed snapshot
 would authenticate unless a separate trusted committed epoch rejects it.
+It also cannot enforce the new exclusive lease across real processes: no
+production backend may claim cross-instance revocation until the lease is
+implemented and verified on the target platform. A v1 snapshot is refused by
+v2; no automatic migration, reset, or private-key export is provided. Pre-v2
+identities require a separately reviewed owner-authorized rekey/reconciliation
+plan. Neither new protection is claimed from historical CI evidence.
 External root loss makes sealed keys unavailable; root compromise defeats
 software confidentiality. Ambiguous errors poison the live instance and
-require a trusted reload. The fixed key cap can deny availability. Snapshot v1
-is internal, not an App wire format; unknown versions fail closed and future
-format changes require a reviewed migration. No old persistent secret state is
+require a trusted reload. The fixed key cap can deny availability. Snapshot v2
+is internal, not an App wire format; v1 and unknown versions fail closed and
+future format changes require a reviewed migration. No old persistent secret state is
 migrated or reset. Phase 3's non-serialized IdentityState is still not durable.
 
 Explicitly out of scope: Linux production `KeyStateStore`, TPM/SE, hardware
@@ -147,8 +164,8 @@ private vulnerability channel, and branch protection also remain open.
 ## PR, review, and merge status
 
 PR: [#4](https://github.com/shili-chunfeng/Independent-Computing-Core/pull/4),
-opened as a draft while its CI and this report were finalized. After a
-successful latest report/PR-head CI, handoff is
+returned to **draft — NOT VERIFIED** for security remediation. Only after
+successful latest push **and** PR-head CI, handoff can be
 **READY FOR OWNER REVIEW — DO NOT MERGE**. Owner review and a manual merge
 are required. This branch is **NOT MERGED** and is not the next milestone's
 source of truth.

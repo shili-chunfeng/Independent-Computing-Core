@@ -12,6 +12,17 @@ Linux anti-rollback adapter, seal-root provisioning, or App-facing permission
 gate exists. Do not claim actual durable anti-rollback, host-root, physical,
 swap, or crash-dump protection. Identity Core still lacks durable persistence.
 
+PR #4's v2 review remediation binds each descriptor to a trusted never-reused
+issuance epoch and requires an exclusive, non-stealable Port lease for the
+entire live signing instance. New-head evidence must come from PR #4's actual
+push and PR CI, not its prior green run. The memory test Port models
+same-process exclusion only;
+there is no production interprocess/hardware lease, so production revocation
+consistency is not claimed. v1 snapshots are refused by v2 without implicit
+migration or re-provisioning; old identities require a separately reviewed
+rekey/reconciliation procedure. Decoder zero/duplicate-secret rejection is
+likewise not evidenced by the historical CI run.
+
 The security model is defined primarily by:
 
 - `docs/Phase_0_System_Constitution_v0.1.md`
