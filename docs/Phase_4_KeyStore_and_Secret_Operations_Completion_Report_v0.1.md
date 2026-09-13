@@ -1,18 +1,18 @@
 # Independent Computing Core
 ## Phase 4 — KeyStore & Secret Operations Completion Report v0.1
 
-- **Status:** PR #4 security remediation in progress; new HEAD **NOT VERIFIED**
+- **Status:** PR #4 remediation verified in the modeled boundary; production lease **NOT VERIFIED**
 - **Base HEAD:** `ed4fc74fa33813c8663e22c7824e5dafb3ec7b4e`
 - **Branch:** `phase-4-keystore`
-- **Evidence branch HEAD:** `ff55b5d74072caf6501651eb37bd2e1dc9fbd600`
+- **Evidence branch HEAD:** `6af85ffba1ded01f1d1dca9267d88628b13b368c`
 - **Pull request:** [#4](https://github.com/shili-chunfeng/Independent-Computing-Core/pull/4)
 - **Review date:** 2026-09-13
 - **Merge status:** **NOT MERGED**
 
-The evidence HEAD and runs below belong to the original PR implementation,
-**before** the review findings described here. They must not be cited as proof
-that this remediation passed. The final remediation HEAD and its latest CI
-belong in the PR because adding them here creates a new HEAD and another run.
+The evidence HEAD above is the last tested implementation commit before this
+report update. The final report/PR HEAD and its latest CI belong in the PR:
+embedding that new HEAD/run here would create another commit and required run.
+Older green runs are listed separately and do **not** verify the remediation.
 
 ## Source of truth and milestone
 
@@ -38,10 +38,11 @@ policy/lockfile, relevant code/tests, CI, README, and SECURITY.
 - Versioned and bounded ChaCha20-Poly1305 sealed security snapshots, a
   per-namespace HKDF key, authenticated epoch/namespace, canonical sorted
   records, fail-closed decoding, and instance poisoning after ambiguous writes.
-- Review remediation proposed on this branch: descriptor issuance generation
+- Review remediation on this branch: descriptor issuance generation
   from trusted never-reused epoch, exclusive namespace lease held through
   signing and revocation, v2 snapshot with explicit v1 rejection, and stronger
-  decoder invariants. **New-head CI evidence is pending.**
+  decoder invariants. New push and PR CI passed at the evidence HEAD; only
+  the in-process reference/test model is verified.
 
 Changed paths:
 
@@ -74,9 +75,9 @@ actual caller and authorize every operation.
 | Threat / invariant | Evidence and explicit limit |
 |---|---|
 | T-ID-001, INV-007 | no private export API; signing seed stays in owned secret wrapper; compile-fail regressions for export/descriptor seed |
-| T-ID-002 | distinct handles and public keys, exact purpose/public/seed binding; negative substitution/collision tests |
-| T-CAP-002, T-CAP-004, INV-004 | proposed persisted issuance generation prevents destroyed descriptor ABA, including repeated ID and seed; latest tests NOT VERIFIED |
-| T-CAP-007 | proposed exclusive lifetime Port lease excludes stale parallel signers; cross-process adapter NOT IMPLEMENTED |
+| T-ID-002 | active-key handle/public correspondence and exact purpose/seed binding; historical ID/public reuse is separated by issuance generation |
+| T-CAP-002, T-CAP-004, INV-004 | persisted issuance generation prevents destroyed/rotated descriptor ABA with repeated ID and seed in 17 passing reference tests |
+| T-CAP-007 | exclusive lifetime Port lease excludes stale parallel signers in the memory model; cross-process adapter **NOT VERIFIED** |
 | T-VLT-005, INV-011 | authenticated epoch and namespace plus Port freshness contract; **no production anti-rollback adapter** |
 | T-VLT-006, INV-012 | complete commit before visibility, fail-closed parser/load, poisoned instance after ambiguous commit |
 | T-PLT-004 | injected entropy, zero-entropy and collision exhaustion deny |
@@ -103,24 +104,29 @@ repository's pinned Rust 1.98.1 formatting, default/all-features metadata,
 dependency inventories, architecture checks, workspace checks, Clippy, tests,
 compile-fail doctests, bare-metal checks, cargo-deny and repeated locked
 release builds. The full push run below passed at the exact implementation
-HEAD. Its decoded job log confirms all named steps completed successfully **at
-that older HEAD only**. The new remediation has no passing Rust CI yet.
+HEAD. The latest remediation push and PR job logs were read separately: all
+listed verification steps passed, including 17 KeyStore unit tests and two
+compile-fail doctests in default and all-features runs.
 
-- [Full successful push run 34739252811](https://github.com/shili-chunfeng/Independent-Computing-Core/actions/runs/34739252811),
-  head `ff55b5d74072caf6501651eb37bd2e1dc9fbd600`, conclusion `success`.
-- [Full successful PR run 34739405449](https://github.com/shili-chunfeng/Independent-Computing-Core/actions/runs/34739405449),
-  same implementation head, conclusion `success`.
+- [Remediation push run 34752375684](https://github.com/shili-chunfeng/Independent-Computing-Core/actions/runs/34752375684),
+  head `6af85ffba1ded01f1d1dca9267d88628b13b368c`, conclusion `success`;
+  actual verify job `103710954430` succeeded.
+- [Remediation PR run 34752377908](https://github.com/shili-chunfeng/Independent-Computing-Core/actions/runs/34752377908),
+  same head, conclusion `success`; actual verify job `103710959757` succeeded.
+- Older [push run 34739252811](https://github.com/shili-chunfeng/Independent-Computing-Core/actions/runs/34739252811)
+  and [PR run 34739405449](https://github.com/shili-chunfeng/Independent-Computing-Core/actions/runs/34739405449)
+  passed at `ff55b5d74072caf6501651eb37bd2e1dc9fbd600` **before** this
+  remediation; they are historical baseline evidence only.
 - Earlier failing runs: formatting (#34738899895, #34739122543,
   #34739206957) and strict Clippy (#34739036115, #34739159129); those are
   repair evidence, not completion evidence.
-- Latest report/PR HEAD run: recorded in PR after this report commit.
-- Remediation push/PR runs: **NOT VERIFIED until the new HEAD jobs complete**.
+- Latest report/PR HEAD run: to be recorded in PR after this report commit.
 
 ## Tests passed and NOT VERIFIED
 
-The original KeyStore had 11 passing unit tests and two compiler-level
-compile-fail doctests at the prior HEAD. The new ABA, lease, v1 migration, and
-authenticated malformed-snapshot tests are **NOT VERIFIED** until new CI.
+The remediated KeyStore has **17 passing unit tests** and two compiler-level
+compile-fail doctests at the evidence HEAD. The new ABA, lease, v1 migration,
+and authenticated malformed-snapshot cases passed both push and PR jobs.
 Cases cover Ed25519 sign/verify and restart, exact binding substitution,
 rotation/destruction before success, crash before/after commit, stale/tampered
 snapshot, wrong root, entropy failure, duplicate public key, handle collision,
@@ -145,7 +151,8 @@ production backend may claim cross-instance revocation until the lease is
 implemented and verified on the target platform. A v1 snapshot is refused by
 v2; no automatic migration, reset, or private-key export is provided. Pre-v2
 identities require a separately reviewed owner-authorized rekey/reconciliation
-plan. Neither new protection is claimed from historical CI evidence.
+plan. The new CI verifies only the portable software logic and shared-memory
+Port model, **not** production cross-process lease or durable anti-rollback.
 External root loss makes sealed keys unavailable; root compromise defeats
 software confidentiality. Ambiguous errors poison the live instance and
 require a trusted reload. The fixed key cap can deny availability. Snapshot v2
@@ -164,8 +171,9 @@ private vulnerability channel, and branch protection also remain open.
 ## PR, review, and merge status
 
 PR: [#4](https://github.com/shili-chunfeng/Independent-Computing-Core/pull/4),
-returned to **draft — NOT VERIFIED** for security remediation. Only after
-successful latest push **and** PR-head CI, handoff can be
+returned to draft for security remediation. Implementation-head push and PR
+CI are green; this report-only HEAD requires its own successful push **and**
+PR-head CI before handoff can be
 **READY FOR OWNER REVIEW — DO NOT MERGE**. Owner review and a manual merge
 are required. This branch is **NOT MERGED** and is not the next milestone's
 source of truth.
