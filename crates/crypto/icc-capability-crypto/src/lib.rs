@@ -105,14 +105,15 @@ impl<P: CryptoProviderV1> CapabilitySeal for SoftwareCapabilitySealer<P> {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use icc_capability_core::authority::{AuthorityError, BoundCaller, CapabilityAuthority, Scope};
     use icc_crypto_rust::RustCryptoProviderV1;
     use icc_rights::Rights;
-    use icc_test_support::{DeterministicRandom, FakeCapabilityClock, InMemoryCapabilityStateStore};
+    use icc_test_support::{
+        DeterministicRandom, FakeCapabilityClock, InMemoryCapabilityStateStore,
+    };
     use icc_types::{AppId, ObjectId, VaultOwnerId};
 
     fn sealer(key: u8) -> SoftwareCapabilitySealer<RustCryptoProviderV1> {
@@ -123,17 +124,30 @@ mod tests {
     fn authenticated_envelope_context_and_tamper_detection() {
         let plaintext = b"private grant and revocation metadata";
         let sealed = sealer(4).seal([1; 16], 7, plaintext).unwrap();
-        assert!(!sealed.windows(plaintext.len()).any(|bytes| bytes == plaintext));
+        assert!(
+            !sealed
+                .windows(plaintext.len())
+                .any(|bytes| bytes == plaintext)
+        );
         assert_eq!(sealer(4).open([1; 16], 7, &sealed).unwrap(), plaintext);
         for (namespace, epoch, key) in [([2; 16], 7, 4), ([1; 16], 8, 4), ([1; 16], 7, 5)] {
-            assert_eq!(sealer(key).open(namespace, epoch, &sealed), Err(PlatformError::Corrupt));
+            assert_eq!(
+                sealer(key).open(namespace, epoch, &sealed),
+                Err(PlatformError::Corrupt)
+            );
         }
         for offset in [0, 8, 10, 26, HEADER_LEN, sealed.len() - 1] {
             let mut tampered = sealed.clone();
             tampered[offset] ^= 1;
-            assert_eq!(sealer(4).open([1; 16], 7, &tampered), Err(PlatformError::Corrupt));
+            assert_eq!(
+                sealer(4).open([1; 16], 7, &tampered),
+                Err(PlatformError::Corrupt)
+            );
         }
-        assert_eq!(sealer(4).open([1; 16], 7, &sealed[..sealed.len() - 1]), Err(PlatformError::Corrupt));
+        assert_eq!(
+            sealer(4).open([1; 16], 7, &sealed[..sealed.len() - 1]),
+            Err(PlatformError::Corrupt)
+        );
     }
 
     #[test]
@@ -145,20 +159,67 @@ mod tests {
         let object = ObjectId::from_bytes([3; 16]);
         let a = BoundCaller::from_trusted_runtime(AppId::from_bytes([1; 16]), [10; 16]);
         let b = BoundCaller::from_trusted_runtime(AppId::from_bytes([2; 16]), [11; 16]);
-        let mut authority = CapabilityAuthority::initialize(store, sealer(5), DeterministicRandom::new(22), clock.clone()).unwrap();
-        let (root, handle) = authority.grant_root(owner, a, Scope::VaultOwner(owner), Rights::READ.union(Rights::DELEGATE), Some(400)).unwrap();
-        let (child, child_handle) = authority.delegate(a, handle, b, Scope::VaultObject(owner, object), Rights::READ, Some(200)).unwrap();
+        let mut authority = CapabilityAuthority::initialize(
+            store,
+            sealer(5),
+            DeterministicRandom::new(22),
+            clock.clone(),
+        )
+        .unwrap();
+        let (root, handle) = authority
+            .grant_root(
+                owner,
+                a,
+                Scope::VaultOwner(owner),
+                Rights::READ.union(Rights::DELEGATE),
+                Some(400),
+            )
+            .unwrap();
+        let (child, child_handle) = authority
+            .delegate(
+                a,
+                handle,
+                b,
+                Scope::VaultObject(owner, object),
+                Rights::READ,
+                Some(200),
+            )
+            .unwrap();
         let old_snapshot = fork.snapshot_for_test();
-        assert_eq!(authority.execute(b, child_handle, Scope::VaultObject(owner, object), Rights::READ, || 42), Ok(42));
+        assert_eq!(
+            authority.execute(
+                b,
+                child_handle,
+                Scope::VaultObject(owner, object),
+                Rights::READ,
+                || 42
+            ),
+            Ok(42)
+        );
         authority.revoke(owner, root).unwrap();
         let (_, ciphertext) = fork.snapshot_for_test().unwrap();
-        assert!(!ciphertext.windows(16).any(|window| window == object.as_bytes()));
+        assert!(
+            !ciphertext
+                .windows(16)
+                .any(|window| window == object.as_bytes())
+        );
         drop(authority);
-        let mut reopened = CapabilityAuthority::open(fork.fork_for_test(), sealer(5), DeterministicRandom::new(44), clock.clone()).unwrap();
-        assert_eq!(reopened.activate(owner, child, b), Err(AuthorityError::Revoked));
+        let mut reopened = CapabilityAuthority::open(
+            fork.fork_for_test(),
+            sealer(5),
+            DeterministicRandom::new(44),
+            clock.clone(),
+        )
+        .unwrap();
+        assert_eq!(
+            reopened.activate(owner, child, b),
+            Err(AuthorityError::Revoked)
+        );
         drop(reopened);
         fork.replace_snapshot_for_test(old_snapshot);
-        assert!(matches!(CapabilityAuthority::open(fork, sealer(5), DeterministicRandom::new(44), clock),
-            Err(AuthorityError::Storage(PlatformError::Corrupt))));
+        assert!(matches!(
+            CapabilityAuthority::open(fork, sealer(5), DeterministicRandom::new(44), clock),
+            Err(AuthorityError::Storage(PlatformError::Corrupt))
+        ));
     }
 }

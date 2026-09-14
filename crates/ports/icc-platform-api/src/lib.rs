@@ -86,10 +86,18 @@ pub trait CapabilityStateStore {
 /// namespace, revision and the entire snapshot under a capability-specific
 /// key and nonce domain, never the Vault or KeyStore domain.
 pub trait CapabilitySeal {
-    fn seal(&self, namespace: [u8; 16], epoch: u64, plaintext: &[u8])
-        -> Result<Vec<u8>, PlatformError>;
-    fn open(&self, namespace: [u8; 16], epoch: u64, sealed: &[u8])
-        -> Result<Vec<u8>, PlatformError>;
+    fn seal(
+        &self,
+        namespace: [u8; 16],
+        epoch: u64,
+        plaintext: &[u8],
+    ) -> Result<Vec<u8>, PlatformError>;
+    fn open(
+        &self,
+        namespace: [u8; 16],
+        epoch: u64,
+        sealed: &[u8],
+    ) -> Result<Vec<u8>, PlatformError>;
 }
 
 /// Trusted authority clock. Unlike a boot-relative clock, values share a
