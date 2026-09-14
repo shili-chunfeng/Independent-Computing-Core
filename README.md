@@ -180,6 +180,7 @@ caller-bound service/API exists.
 - `docs/Phase_3_Identity_Core_Completion_Report_v0.1.md`
 - `docs/Phase_4_KeyStore_and_Secret_Operations_v0.1.md`
 - `docs/Phase_5_Personal_Vault_and_Object_Storage_v0.1.md`
+- `docs/Phase_5_Personal_Vault_and_Object_Storage_Completion_Report_v0.1.md`
 - `docs/adr/ADR-0001` through `ADR-0009` (see individual status), proposed
   `ADR-0010` (Phase 5 storage separation)
 
