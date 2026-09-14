@@ -254,7 +254,10 @@ fn failed_reservation_poison_requires_trusted_reopen() {
         vault.create(ALICE, OWNER, 1, b"a", b"b"),
         Err(VaultError::Storage(PlatformError::Unavailable))
     );
-    assert_eq!(vault.create(ALICE, OWNER, 1, b"a", b"b"), Err(VaultError::Unavailable));
+    assert_eq!(
+        vault.create(ALICE, OWNER, 1, b"a", b"b"),
+        Err(VaultError::Unavailable)
+    );
     drop(vault);
     let mut trusted = reopen(fork, grants).unwrap();
     assert!(trusted.create(ALICE, OWNER, 1, b"a", b"b").is_ok());
@@ -310,7 +313,9 @@ fn bounds_entropy_and_parser_mutations() {
 #[test]
 fn bounded_decoder_mutation_harness_never_accepts_noncanonical_records() {
     let (mut vault, fork, _) = setup();
-    vault.create(ALICE, OWNER, 1, b"metadata", b"content").unwrap();
+    vault
+        .create(ALICE, OWNER, 1, b"metadata", b"content")
+        .unwrap();
     let snapshot = fork.snapshot_for_test().unwrap();
     let plain = FakeSeal.open(NS, snapshot.0, &snapshot.1).unwrap();
     let mut rng = 0x9e37_79b9_7f4a_7c15u64;
