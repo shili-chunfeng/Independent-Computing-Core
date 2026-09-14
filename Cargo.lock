@@ -307,6 +307,26 @@ name = "icc-types"
 version = "0.2.0"
 
 [[package]]
+name = "icc-vault-core"
+version = "0.2.0"
+dependencies = [
+ "icc-error",
+ "icc-platform-api",
+ "icc-test-support",
+ "icc-types",
+]
+
+[[package]]
+name = "icc-vault-crypto"
+version = "0.2.0"
+dependencies = [
+ "icc-crypto-api",
+ "icc-crypto-rust",
+ "icc-error",
+ "icc-platform-api",
+]
+
+[[package]]
 name = "indie-cli"
 version = "0.2.0"
 dependencies = [

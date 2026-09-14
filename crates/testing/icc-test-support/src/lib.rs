@@ -6,7 +6,7 @@ use std::rc::Rc;
 
 use icc_error::PlatformError;
 use icc_platform_api::{
-    Clock, KeyStateStore, ObjectStore, SecretStore, SecureRandom, SecurityStateStore,
+    Clock, KeyStateStore, ObjectStore, SecretStore, SecureRandom, SecurityStateStore, VaultStateStore,
 };
 use icc_types::{MonotonicMs, ObjectId, SecretHandle, SecurityStateKey, WallTimeMs};
 
@@ -262,6 +262,36 @@ impl KeyStateStore for InMemoryKeyStateStore {
             return Err(PlatformError::Unavailable);
         }
         Ok(())
+    }
+}
+
+/// Independently provisioned test-only Vault namespace. It reuses the
+/// KeyStore's *in-memory state-machine model*, never its instance or key
+/// namespace. Neither model is a production durable storage implementation.
+pub struct InMemoryVaultStateStore(InMemoryKeyStateStore);
+
+impl InMemoryVaultStateStore {
+    pub fn new(namespace: [u8; 16]) -> Self { Self(InMemoryKeyStateStore::new(namespace)) }
+    pub fn fork_for_test(&self) -> Self { Self(self.0.fork_for_test()) }
+    pub fn fail_next_reservation(&mut self) { self.0.fail_next_reservation(); }
+    pub fn fail_before_commit(&mut self) { self.0.fail_before_commit(); }
+    pub fn fail_after_commit(&mut self) { self.0.fail_after_commit(); }
+    pub fn snapshot_for_test(&self) -> Option<(u64, Vec<u8>)> { self.0.snapshot_for_test() }
+    pub fn replace_snapshot_for_test(&mut self, snapshot: Option<(u64, Vec<u8>)>) {
+        self.0.replace_snapshot_for_test(snapshot);
+    }
+}
+
+impl VaultStateStore for InMemoryVaultStateStore {
+    fn acquire_exclusive(&mut self) -> Result<(), PlatformError> { self.0.acquire_exclusive() }
+    fn release_exclusive(&mut self) { self.0.release_exclusive(); }
+    fn namespace(&self) -> Result<[u8; 16], PlatformError> { self.0.namespace() }
+    fn load(&self) -> Result<Option<(u64, Vec<u8>)>, PlatformError> { self.0.load() }
+    fn reserve_epoch(&mut self, expected_committed: u64) -> Result<u64, PlatformError> {
+        self.0.reserve_epoch(expected_committed)
+    }
+    fn commit(&mut self, expected_committed: u64, reserved_epoch: u64, sealed: &[u8]) -> Result<(), PlatformError> {
+        self.0.commit(expected_committed, reserved_epoch, sealed)
     }
 }
 

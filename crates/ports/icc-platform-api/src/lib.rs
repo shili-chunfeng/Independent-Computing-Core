@@ -24,6 +24,45 @@ pub trait ObjectStore {
     fn delete(&mut self, id: ObjectId) -> Result<(), PlatformError>;
 }
 
+/// Trusted, authority-owned Vault snapshot store. This is distinct from
+/// SecurityStateStore and KeyStateStore. The namespace and committed revision
+/// must be durable and immune to rollback, while epoch reservations must never
+/// be reused, even after a failed commit or crash. A commit publishes the whole
+/// sealed snapshot and trusted revision atomically. An exclusive, non-stealable
+/// lease prevents stale concurrent writers; all other methods require it.
+/// A generic file or the simple ObjectStore above does not meet this contract.
+pub trait VaultStateStore {
+    fn acquire_exclusive(&mut self) -> Result<(), PlatformError>;
+    fn release_exclusive(&mut self);
+    fn namespace(&self) -> Result<[u8; 16], PlatformError>;
+    fn load(&self) -> Result<Option<(u64, Vec<u8>)>, PlatformError>;
+    fn reserve_epoch(&mut self, expected_committed: u64) -> Result<u64, PlatformError>;
+    fn commit(
+        &mut self,
+        expected_committed: u64,
+        reserved_epoch: u64,
+        sealed: &[u8],
+    ) -> Result<(), PlatformError>;
+}
+
+/// Internal cryptographic service boundary. Implementations must authenticate
+/// namespace, revision, format and *all* object data and metadata, and keep
+/// sealing keys out of the Domain Core and application interfaces.
+pub trait VaultSeal {
+    fn seal(
+        &self,
+        namespace: [u8; 16],
+        epoch: u64,
+        plaintext: &[u8],
+    ) -> Result<Vec<u8>, PlatformError>;
+    fn open(
+        &self,
+        namespace: [u8; 16],
+        epoch: u64,
+        sealed: &[u8],
+    ) -> Result<Vec<u8>, PlatformError>;
+}
+
 pub trait SecurityStateStore {
     fn get(&self, key: SecurityStateKey) -> Result<Option<Vec<u8>>, PlatformError>;
     fn put(&mut self, key: SecurityStateKey, value: &[u8]) -> Result<(), PlatformError>;

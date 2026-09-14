@@ -30,6 +30,8 @@ opaque_id!(RecoveryAuthorityId, 16);
 opaque_id!(AppPseudonymId, 32);
 opaque_id!(AppId, 16);
 opaque_id!(ObjectId, 16);
+/// Local Vault ownership namespace; never the root identity or an App grant.
+opaque_id!(VaultOwnerId, 16);
 opaque_id!(SecurityStateKey, 32);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd)]

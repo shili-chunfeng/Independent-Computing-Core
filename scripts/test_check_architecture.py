@@ -397,6 +397,21 @@ class DependencyDeclarationPolicyTests(unittest.TestCase):
         add_workspace_declaration(metadata, "indie-cli", "icc-identity-core")
         self.assert_rejected(metadata, "package icc-identity-core")
 
+    def test_app_to_vault_core_is_rejected_even_with_alias(self) -> None:
+        metadata = metadata_from_policy()
+        add_workspace_declaration(metadata, "indie-cli", "icc-vault-core", alias="data-access")
+        self.assert_rejected(metadata, "package icc-vault-core")
+
+    def test_app_to_vault_sealer_is_rejected(self) -> None:
+        metadata = metadata_from_policy()
+        add_workspace_declaration(metadata, "indie-cli", "icc-vault-crypto")
+        self.assert_rejected(metadata, "package icc-vault-crypto")
+
+    def test_vault_domain_to_concrete_provider_is_rejected(self) -> None:
+        metadata = metadata_from_policy()
+        add_workspace_declaration(metadata, "icc-vault-core", "icc-crypto-rust")
+        self.assert_rejected(metadata, "package icc-crypto-rust")
+
     def test_platform_port_to_linux_adapter_is_rejected(self) -> None:
         metadata = metadata_from_policy()
         add_workspace_declaration(metadata, "icc-platform-api", "icc-platform-linux")
