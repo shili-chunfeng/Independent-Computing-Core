@@ -1,17 +1,16 @@
-# Independent Computing Core — Phase 4 KeyStore review
+# Independent Computing Core — Phase 5 Vault prototype review
 
 Independent Computing Core (ICC) is a portable personal-computing core intended to move from a Linux/VM prototype toward a future minimal OS without making Linux part of the Domain Core contract.
 
 The repository contains the Phase 0 architecture/security baselines, Phase 1
-engineering skeleton, Phase 2 ClassicalV1 cryptographic foundation, the
-Phase 3 portable identity-authority state machine, and a proposed Phase 4
-non-exporting software KeyStore for owner review. The KeyStore's durable
-anti-rollback storage Port and seal-root provisioning have no production Linux
-implementation yet; see `docs/Phase_4_KeyStore_and_Secret_Operations_v0.1.md`.
-PR #4's review remediation proposes an exclusive namespace lease and a v2
-snapshot with never-reused issuance generations. Check the PR's latest HEAD
-and push/PR CI before relying on test claims; v1 has no automatic migration
-path and no production cross-process lease backend exists.
+engineering skeleton, Phase 2 ClassicalV1 cryptographic foundation, Phase 3
+portable identity core, and the merged Phase 4 non-exporting KeyStore. Phase 5
+proposes a portable, bounded Personal Vault reference model. Its object IDs
+are names rather than access grants; authorization is checked before object
+lookup or metadata disclosure, and sealed metadata and content commit as a
+single snapshot. See `docs/Phase_5_Personal_Vault_and_Object_Storage_v0.1.md`.
+There is no production Linux trusted Vault storage, cross-process lease,
+Vault-key provisioning, caller-bound service, or App permission flow yet.
 
 ## Mandatory project execution contract
 
@@ -41,7 +40,8 @@ An unmerged branch or PR is not a completed milestone. The next milestone begins
 - The policy validates the declared version requirement, source/path identity, default-feature setting, and requested features independently of whether Cargo activates the edge.
 - Default and all-features locked graphs are checked separately; the all-features feature union must match the reviewed Phase 2 crypto feature policy.
 - The repository dependency policy rejects direct production App dependencies
-  on Identity Core, `icc-crypto-api`, `icc-crypto-rust`, and `icc-keystore`.
+  on Identity Core, Vault Core, `icc-crypto-api`, `icc-crypto-rust`,
+  `icc-keystore`, and `icc-vault-crypto`.
 - Secret wrapper identifiers are additionally guarded by conservative source checks outside the crypto boundary.
 - Fifteen independent `compile_fail` doctests provide compiler-level regression evidence that each of the five secret wrappers implements none of `Clone`, `Copy`, or `Debug`.
 - Source-pattern checks do not expand arbitrary macros and are not Rust AST, compiler, visibility, runtime-sandbox, or formal proofs. The compile-fail tests are compiler checks, but not formal verification.
@@ -122,6 +122,7 @@ cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 cargo test --workspace --locked
 cargo test -p icc-crypto-api --doc --locked
 cargo test -p icc-identity-core --doc --locked
+cargo test -p icc-vault-core --doc --locked
 cargo test --workspace --all-features --locked
 
 # Bare-metal no_std portability checks
@@ -133,6 +134,8 @@ cargo check -p icc-capability-core --target thumbv7em-none-eabi --no-default-fea
 cargo check -p icc-identity-core --target thumbv7em-none-eabi --no-default-features --locked
 cargo check -p icc-crypto-api --target thumbv7em-none-eabi --no-default-features --locked
 cargo check -p icc-crypto-rust --target thumbv7em-none-eabi --no-default-features --locked
+cargo check -p icc-vault-core --target thumbv7em-none-eabi --no-default-features --locked
+cargo check -p icc-vault-crypto --target thumbv7em-none-eabi --no-default-features --locked
 
 # Dependency policy tool; CI pins the exact version and uses the tool package lockfile
 cargo install --locked --version 0.20.2 cargo-deny
@@ -175,8 +178,9 @@ caller-bound service/API exists.
 - `docs/Phase_2_Cryptographic_Hardening_Report_v0.1.md`
 - `docs/Phase_3_Identity_Core_v0.1.md`
 - `docs/Phase_3_Identity_Core_Completion_Report_v0.1.md`
-- `docs/adr/ADR-0001` through `ADR-0006` (Accepted), proposed `ADR-0007`
-  (Phase 3 owner review), proposed `ADR-0008` (Phase 4 owner review), and
-  proposed `ADR-0009` (Phase 9 owner review)
+- `docs/Phase_4_KeyStore_and_Secret_Operations_v0.1.md`
+- `docs/Phase_5_Personal_Vault_and_Object_Storage_v0.1.md`
+- `docs/adr/ADR-0001` through `ADR-0009` (see individual status), proposed
+  `ADR-0010` (Phase 5 storage separation)
 
 This is a prototype architecture/security baseline, not a production security product. See `SECURITY.md` for explicit non-claims and remaining reporting/governance risks.
