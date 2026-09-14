@@ -1,6 +1,6 @@
 # Phase 6 — Capability Authority and Revocation: completion evidence v0.1
 
-**Status:** Implementation and exact-head CI verification pending; owner review required  
+**Status:** Implementation-head CI green; final test/report HEAD and PR CI pending
 **Base main:** `aab2d8331d903cec6636ab10fb096c1221cd5370`  
 **Branch:** `phase-6-capability-authority`; do not merge automatically
 
@@ -38,8 +38,24 @@ and negative tests add App-to-capability-crypto and core-to-provider denials.
 
 ## Exact-head CI evidence
 
-Pending push and PR workflow verification. Only their final exact-head green
-conclusions may establish readiness for owner review.
+The pre-report implementation-head [push run 34825973743](https://github.com/shili-chunfeng/Independent-Computing-Core/actions/runs/34825973743)
+at `76266a47816281b37234991c48a6ae62e828d247` completed **success**;
+its [verify job 103918112314](https://github.com/shili-chunfeng/Independent-Computing-Core/actions/runs/34825973743/job/103918112314)
+reports:
+
+| Gate | Result on that implementation head |
+|---|---|
+| locked default/all-feature metadata and dependency inventory | PASS |
+| architecture policy/self/negative checks | PASS — 42 Python tests |
+| rustfmt, default/all-feature check and strict Clippy | PASS |
+| default/all-feature tests and security compile-fail doctests | PASS |
+| bare-metal no_std, including new capability crypto | PASS |
+| all-feature cargo-deny advisories/bans/licenses/sources | PASS |
+| repeated locked release builds and lockfile stability | PASS |
+
+Two later tests explicitly cover fresh-session stale-handle rejection after a
+simulated restart and effect ordering around a revoke. Their final HEAD must
+pass its own push and PR CI; the older run is not evidence for those changes.
 
 ## Remaining boundaries
 

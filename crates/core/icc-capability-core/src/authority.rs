@@ -964,6 +964,73 @@ mod tests {
     }
 
     #[test]
+    fn reboot_discards_old_handles_even_when_random_sequence_repeats() {
+        let clock = FakeCapabilityClock::new(10);
+        let store = InMemoryCapabilityStateStore::new([8; 16]);
+        let fork = store.fork_for_test();
+        let mut authority = new(store, clock.clone());
+        let (id, old_handle) = authority
+            .grant_root(
+                OWNER,
+                A,
+                Scope::VaultObject(OWNER, OBJECT),
+                Rights::READ.union(Rights::DELEGATE),
+                None,
+            )
+            .unwrap();
+        assert_eq!(
+            authority.delegate(
+                A,
+                old_handle,
+                B,
+                Scope::VaultObject(OWNER, OBJECT),
+                Rights::READ,
+                Some(11 + MAX_DELEGATION_LIFETIME_MS),
+            ),
+            Err(AuthorityError::InvalidScope)
+        );
+        drop(authority);
+        let fresh = BoundCaller::from_trusted_runtime(AppId::from_bytes([1; 16]), [22; 16]);
+        let mut reopened =
+            TestAuthority::open(fork, IdentitySeal, DeterministicRandom::new(20), clock).unwrap();
+        assert_eq!(
+            read(&mut reopened, A, old_handle, OBJECT),
+            Err(AuthorityError::Denied)
+        );
+        let new_handle = reopened.activate(OWNER, id, fresh).unwrap();
+        assert_ne!(old_handle, new_handle);
+        assert_eq!(
+            read(&mut reopened, fresh, old_handle, OBJECT),
+            Err(AuthorityError::Denied)
+        );
+        assert_eq!(read(&mut reopened, fresh, new_handle, OBJECT), Ok(true));
+    }
+
+    #[test]
+    fn effect_finishes_before_revoke_ack_and_cannot_replay() {
+        let clock = FakeCapabilityClock::new(10);
+        let store = InMemoryCapabilityStateStore::new([8; 16]);
+        let mut authority = new(store, clock);
+        let (id, handle) = authority
+            .grant_root(OWNER, A, Scope::VaultObject(OWNER, OBJECT), Rights::READ, None)
+            .unwrap();
+        let mut executions = 0;
+        authority
+            .execute(A, handle, Scope::VaultObject(OWNER, OBJECT), Rights::READ, || {
+                executions += 1;
+            })
+            .unwrap();
+        authority.revoke(OWNER, id).unwrap();
+        assert_eq!(
+            authority.execute(A, handle, Scope::VaultObject(OWNER, OBJECT), Rights::READ, || {
+                executions += 1;
+            }),
+            Err(AuthorityError::Revoked)
+        );
+        assert_eq!(executions, 1);
+    }
+
+    #[test]
     fn expiry_including_restart_and_clock_rollback() {
         let clock = FakeCapabilityClock::new(10);
         let store = InMemoryCapabilityStateStore::new([8; 16]);
