@@ -12,9 +12,16 @@ impl Rights {
     pub const WRITE: Self = Self(1 << 1);
     pub const DELETE: Self = Self(1 << 2);
     pub const DELEGATE: Self = Self(1 << 3);
+    pub const CREATE: Self = Self(1 << 4);
+    pub const LIST: Self = Self(1 << 5);
 
     pub const fn from_bits(bits: u32) -> Option<Self> {
-        const KNOWN: u32 = Rights::READ.0 | Rights::WRITE.0 | Rights::DELETE.0 | Rights::DELEGATE.0;
+        const KNOWN: u32 = Rights::READ.0
+            | Rights::WRITE.0
+            | Rights::DELETE.0
+            | Rights::DELEGATE.0
+            | Rights::CREATE.0
+            | Rights::LIST.0;
         if bits & !KNOWN == 0 {
             Some(Self(bits))
         } else {
@@ -56,5 +63,20 @@ mod tests {
         let parent = Rights::READ.union(Rights::DELEGATE);
         assert_eq!(parent.attenuate(Rights::READ), Some(Rights::READ));
         assert_eq!(parent.attenuate(Rights::WRITE), None);
+    }
+
+    #[test]
+    fn every_known_rights_pair_preserves_subset_invariant() {
+        for parent_bits in 0..64 {
+            let parent = Rights::from_bits(parent_bits).unwrap();
+            for child_bits in 0..64 {
+                let child = Rights::from_bits(child_bits).unwrap();
+                assert_eq!(
+                    parent.attenuate(child),
+                    child.is_subset_of(parent).then_some(child)
+                );
+            }
+        }
+        assert_eq!(Rights::from_bits(1 << 6), None);
     }
 }

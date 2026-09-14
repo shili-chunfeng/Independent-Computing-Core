@@ -220,7 +220,23 @@ name = "icc-capability-core"
 version = "0.2.0"
 dependencies = [
  "icc-error",
+ "icc-platform-api",
  "icc-rights",
+ "icc-test-support",
+ "icc-types",
+]
+
+[[package]]
+name = "icc-capability-crypto"
+version = "0.2.0"
+dependencies = [
+ "icc-capability-core",
+ "icc-crypto-api",
+ "icc-crypto-rust",
+ "icc-error",
+ "icc-platform-api",
+ "icc-rights",
+ "icc-test-support",
  "icc-types",
 ]
 

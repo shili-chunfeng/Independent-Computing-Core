@@ -1,16 +1,20 @@
-# Independent Computing Core — Phase 5 Vault prototype review
+# Independent Computing Core — Phase 6 capability prototype review
 
 Independent Computing Core (ICC) is a portable personal-computing core intended to move from a Linux/VM prototype toward a future minimal OS without making Linux part of the Domain Core contract.
 
 The repository contains the Phase 0 architecture/security baselines, Phase 1
 engineering skeleton, Phase 2 ClassicalV1 cryptographic foundation, Phase 3
-portable identity core, and the merged Phase 4 non-exporting KeyStore. Phase 5
-proposes a portable, bounded Personal Vault reference model. Its object IDs
+portable identity core, and the merged Phase 4 non-exporting KeyStore. Merged
+Phase 5 provides a portable, bounded Personal Vault reference model. Its object IDs
 are names rather than access grants; authorization is checked before object
 lookup or metadata disclosure, and sealed metadata and content commit as a
 single snapshot. See `docs/Phase_5_Personal_Vault_and_Object_Storage_v0.1.md`.
-There is no production Linux trusted Vault storage, cross-process lease,
-Vault-key provisioning, caller-bound service, or App permission flow yet.
+Phase 6 proposes a separate capability security-state authority with session
+handles, scoped explicit delegation, parent-child revocation and restart
+semantics. See `docs/Phase_6_Capability_Authority_and_Revocation_v0.1.md`.
+There is no production Linux trusted storage, cross-process lease,
+security-state key/clock provisioning, caller-bound service or App permission
+flow yet. The Vault's temporary authorizer is not wired to this service.
 
 ## Mandatory project execution contract
 
@@ -41,7 +45,7 @@ An unmerged branch or PR is not a completed milestone. The next milestone begins
 - Default and all-features locked graphs are checked separately; the all-features feature union must match the reviewed Phase 2 crypto feature policy.
 - The repository dependency policy rejects direct production App dependencies
   on Identity Core, Vault Core, `icc-crypto-api`, `icc-crypto-rust`,
-  `icc-keystore`, and `icc-vault-crypto`.
+  `icc-keystore`, `icc-vault-crypto`, and `icc-capability-crypto`.
 - Secret wrapper identifiers are additionally guarded by conservative source checks outside the crypto boundary.
 - Fifteen independent `compile_fail` doctests provide compiler-level regression evidence that each of the five secret wrappers implements none of `Clone`, `Copy`, or `Debug`.
 - Source-pattern checks do not expand arbitrary macros and are not Rust AST, compiler, visibility, runtime-sandbox, or formal proofs. The compile-fail tests are compiler checks, but not formal verification.
@@ -181,7 +185,9 @@ caller-bound service/API exists.
 - `docs/Phase_4_KeyStore_and_Secret_Operations_v0.1.md`
 - `docs/Phase_5_Personal_Vault_and_Object_Storage_v0.1.md`
 - `docs/Phase_5_Personal_Vault_and_Object_Storage_Completion_Report_v0.1.md`
+- `docs/Phase_6_Capability_Authority_and_Revocation_v0.1.md`
+- `docs/Phase_6_Capability_Authority_and_Revocation_Completion_Report_v0.1.md`
 - `docs/adr/ADR-0001` through `ADR-0009` (see individual status), proposed
-  `ADR-0010` (Phase 5 storage separation)
+  `ADR-0010` (Phase 5 storage separation) and `ADR-0011` (Phase 6 security state)
 
 This is a prototype architecture/security baseline, not a production security product. See `SECURITY.md` for explicit non-claims and remaining reporting/governance risks.

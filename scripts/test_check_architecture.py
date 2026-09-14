@@ -407,6 +407,16 @@ class DependencyDeclarationPolicyTests(unittest.TestCase):
         add_workspace_declaration(metadata, "indie-cli", "icc-vault-crypto")
         self.assert_rejected(metadata, "package icc-vault-crypto")
 
+    def test_app_to_capability_sealer_is_rejected(self) -> None:
+        metadata = metadata_from_policy()
+        add_workspace_declaration(metadata, "indie-cli", "icc-capability-crypto")
+        self.assert_rejected(metadata, "package icc-capability-crypto")
+
+    def test_capability_domain_to_concrete_provider_is_rejected(self) -> None:
+        metadata = metadata_from_policy()
+        add_workspace_declaration(metadata, "icc-capability-core", "icc-crypto-rust")
+        self.assert_rejected(metadata, "package icc-crypto-rust")
+
     def test_vault_domain_to_concrete_provider_is_rejected(self) -> None:
         metadata = metadata_from_policy()
         add_workspace_declaration(metadata, "icc-vault-core", "icc-crypto-rust")

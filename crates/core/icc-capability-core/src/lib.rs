@@ -3,6 +3,10 @@
 
 //! Pure capability authorization semantics.
 
+extern crate alloc;
+
+pub mod authority;
+
 use icc_error::DomainError;
 use icc_rights::Rights;
 use icc_types::{AppId, Generation, MonotonicMs, ObjectId};
