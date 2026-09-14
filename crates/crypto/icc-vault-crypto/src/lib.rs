@@ -96,7 +96,9 @@ impl<P: CryptoProviderV1> VaultSeal for SoftwareVaultSealer<P> {
         if sealed[..HEADER_LEN] != hdr {
             return Err(PlatformError::Corrupt);
         }
-        let key = self.key_for(namespace).map_err(|_| PlatformError::Corrupt)?;
+        let key = self
+            .key_for(namespace)
+            .map_err(|_| PlatformError::Corrupt)?;
         self.provider
             .chacha20poly1305_open(&key, nonce(epoch), &hdr, &sealed[HEADER_LEN..])
             .map_err(|_| PlatformError::Corrupt)
@@ -119,14 +121,29 @@ mod tests {
         let sealed = sealer(4).seal(namespace, 7, plaintext).unwrap();
         assert!(!sealed.windows(plaintext.len()).any(|w| w == plaintext));
         assert_eq!(sealer(4).open(namespace, 7, &sealed).unwrap(), plaintext);
-        assert_eq!(sealer(5).open(namespace, 7, &sealed), Err(PlatformError::Corrupt));
-        assert_eq!(sealer(4).open([2; 16], 7, &sealed), Err(PlatformError::Corrupt));
-        assert_eq!(sealer(4).open(namespace, 8, &sealed), Err(PlatformError::Corrupt));
+        assert_eq!(
+            sealer(5).open(namespace, 7, &sealed),
+            Err(PlatformError::Corrupt)
+        );
+        assert_eq!(
+            sealer(4).open([2; 16], 7, &sealed),
+            Err(PlatformError::Corrupt)
+        );
+        assert_eq!(
+            sealer(4).open(namespace, 8, &sealed),
+            Err(PlatformError::Corrupt)
+        );
         for offset in [0, 8, 12, 26, HEADER_LEN, sealed.len() - 1] {
             let mut altered = sealed.clone();
             altered[offset] ^= 1;
-            assert_eq!(sealer(4).open(namespace, 7, &altered), Err(PlatformError::Corrupt));
+            assert_eq!(
+                sealer(4).open(namespace, 7, &altered),
+                Err(PlatformError::Corrupt)
+            );
         }
-        assert_eq!(sealer(4).open(namespace, 7, &sealed[..sealed.len() - 1]), Err(PlatformError::Corrupt));
+        assert_eq!(
+            sealer(4).open(namespace, 7, &sealed[..sealed.len() - 1]),
+            Err(PlatformError::Corrupt)
+        );
     }
 }

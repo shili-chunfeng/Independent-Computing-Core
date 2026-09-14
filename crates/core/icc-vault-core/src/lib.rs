@@ -71,13 +71,27 @@ pub struct VaultObject {
 }
 
 impl VaultObject {
-    pub const fn id(&self) -> ObjectId { self.id }
-    pub const fn owner(&self) -> VaultOwnerId { self.owner }
-    pub const fn kind(&self) -> u16 { self.kind }
-    pub const fn content_ref(&self) -> &[u8; 16] { &self.content_ref }
-    pub const fn revision(&self) -> u64 { self.revision }
-    pub fn metadata(&self) -> &[u8] { &self.metadata }
-    pub fn content(&self) -> &[u8] { &self.content }
+    pub const fn id(&self) -> ObjectId {
+        self.id
+    }
+    pub const fn owner(&self) -> VaultOwnerId {
+        self.owner
+    }
+    pub const fn kind(&self) -> u16 {
+        self.kind
+    }
+    pub const fn content_ref(&self) -> &[u8; 16] {
+        &self.content_ref
+    }
+    pub const fn revision(&self) -> u64 {
+        self.revision
+    }
+    pub fn metadata(&self) -> &[u8] {
+        &self.metadata
+    }
+    pub fn content(&self) -> &[u8] {
+        &self.content
+    }
 }
 
 /// One atomic sealed snapshot for a bounded prototype namespace. The store
@@ -94,21 +108,32 @@ pub struct VaultCore<S, C, R, A> {
     poisoned: bool,
 }
 
-impl<S: VaultStateStore, C: VaultSeal, R: SecureRandom, A: VaultAuthorizer>
-    VaultCore<S, C, R, A>
-{
+impl<S: VaultStateStore, C: VaultSeal, R: SecureRandom, A: VaultAuthorizer> VaultCore<S, C, R, A> {
     /// Provision explicitly. A missing provisioned snapshot is never treated
     /// as an empty Vault after restart.
-    pub fn initialize(mut store: S, sealer: C, random: R, authority: A) -> Result<Self, VaultError> {
+    pub fn initialize(
+        mut store: S,
+        sealer: C,
+        random: R,
+        authority: A,
+    ) -> Result<Self, VaultError> {
         store.acquire_exclusive().map_err(VaultError::Storage)?;
         let namespace = store.namespace().map_err(VaultError::Storage)?;
-        if namespace == [0; 16] { return Err(VaultError::Corrupt); }
+        if namespace == [0; 16] {
+            return Err(VaultError::Corrupt);
+        }
         if store.load().map_err(VaultError::Storage)?.is_some() {
             return Err(VaultError::AlreadyProvisioned);
         }
         let mut core = Self {
-            store, sealer, random, authority, namespace, epoch: 0,
-            objects: BTreeMap::new(), poisoned: false,
+            store,
+            sealer,
+            random,
+            authority,
+            namespace,
+            epoch: 0,
+            objects: BTreeMap::new(),
+            poisoned: false,
         };
         core.commit(BTreeMap::new())?;
         Ok(core)
@@ -117,20 +142,47 @@ impl<S: VaultStateStore, C: VaultSeal, R: SecureRandom, A: VaultAuthorizer>
     pub fn open(mut store: S, sealer: C, random: R, authority: A) -> Result<Self, VaultError> {
         store.acquire_exclusive().map_err(VaultError::Storage)?;
         let namespace = store.namespace().map_err(VaultError::Storage)?;
-        if namespace == [0; 16] { return Err(VaultError::Corrupt); }
-        let (epoch, sealed) = store.load().map_err(VaultError::Storage)?
+        if namespace == [0; 16] {
+            return Err(VaultError::Corrupt);
+        }
+        let (epoch, sealed) = store
+            .load()
+            .map_err(VaultError::Storage)?
             .ok_or(VaultError::Unprovisioned)?;
-        if epoch == 0 || sealed.len() > MAX_SNAPSHOT + 50 { return Err(VaultError::Corrupt); }
-        let plaintext = sealer.open(namespace, epoch, &sealed).map_err(|_| VaultError::Corrupt)?;
+        if epoch == 0 || sealed.len() > MAX_SNAPSHOT + 50 {
+            return Err(VaultError::Corrupt);
+        }
+        let plaintext = sealer
+            .open(namespace, epoch, &sealed)
+            .map_err(|_| VaultError::Corrupt)?;
         let objects = decode(&plaintext, epoch)?;
-        Ok(Self { store, sealer, random, authority, namespace, epoch, objects, poisoned: false })
+        Ok(Self {
+            store,
+            sealer,
+            random,
+            authority,
+            namespace,
+            epoch,
+            objects,
+            poisoned: false,
+        })
     }
 
     fn ready(&self) -> Result<(), VaultError> {
-        if self.poisoned { Err(VaultError::Unavailable) } else { Ok(()) }
+        if self.poisoned {
+            Err(VaultError::Unavailable)
+        } else {
+            Ok(())
+        }
     }
 
-    fn require(&self, caller: AppId, owner: VaultOwnerId, object: Option<ObjectId>, action: VaultAction) -> Result<(), VaultError> {
+    fn require(
+        &self,
+        caller: AppId,
+        owner: VaultOwnerId,
+        object: Option<ObjectId>,
+        action: VaultAction,
+    ) -> Result<(), VaultError> {
         self.ready()?;
         if owner.as_bytes() == &[0; 16] || !self.authority.permits(caller, owner, object, action) {
             return Err(VaultError::Denied);
@@ -141,31 +193,58 @@ impl<S: VaultStateStore, C: VaultSeal, R: SecureRandom, A: VaultAuthorizer>
     fn new_reference(&mut self, avoid: Option<[u8; 16]>) -> Result<[u8; 16], VaultError> {
         for _ in 0..ID_ATTEMPTS {
             let mut bytes = [0; 16];
-            self.random.fill(&mut bytes).map_err(|_| VaultError::Entropy)?;
-            if bytes != [0; 16] && Some(bytes) != avoid
+            self.random
+                .fill(&mut bytes)
+                .map_err(|_| VaultError::Entropy)?;
+            if bytes != [0; 16]
+                && Some(bytes) != avoid
                 && !self.objects.contains_key(&ObjectId::from_bytes(bytes))
                 && !self.objects.values().any(|o| o.content_ref == bytes)
-            { return Ok(bytes); }
+            {
+                return Ok(bytes);
+            }
         }
         Err(VaultError::Entropy)
     }
 
-    pub fn create(&mut self, caller: AppId, owner: VaultOwnerId, kind: u16, metadata: &[u8], content: &[u8]) -> Result<ObjectId, VaultError> {
+    pub fn create(
+        &mut self,
+        caller: AppId,
+        owner: VaultOwnerId,
+        kind: u16,
+        metadata: &[u8],
+        content: &[u8],
+    ) -> Result<ObjectId, VaultError> {
         self.require(caller, owner, None, VaultAction::Create)?;
         validate_input(kind, metadata, content)?;
-        if self.objects.len() >= MAX_OBJECTS { return Err(VaultError::Capacity); }
+        if self.objects.len() >= MAX_OBJECTS {
+            return Err(VaultError::Capacity);
+        }
         let id = ObjectId::from_bytes(self.new_reference(None)?);
         let content_ref = self.new_reference(Some(*id.as_bytes()))?;
         let mut next = self.objects.clone();
-        next.insert(id, VaultObject {
-            id, owner, kind, content_ref, revision: 1,
-            metadata: metadata.to_vec(), content: content.to_vec(),
-        });
+        next.insert(
+            id,
+            VaultObject {
+                id,
+                owner,
+                kind,
+                content_ref,
+                revision: 1,
+                metadata: metadata.to_vec(),
+                content: content.to_vec(),
+            },
+        );
         self.commit(next)?;
         Ok(id)
     }
 
-    pub fn read(&self, caller: AppId, owner: VaultOwnerId, id: ObjectId) -> Result<VaultObject, VaultError> {
+    pub fn read(
+        &self,
+        caller: AppId,
+        owner: VaultOwnerId,
+        id: ObjectId,
+    ) -> Result<VaultObject, VaultError> {
         self.require(caller, owner, Some(id), VaultAction::Read)?;
         match self.objects.get(&id) {
             Some(object) if object.owner == owner => Ok(object.clone()),
@@ -177,14 +256,33 @@ impl<S: VaultStateStore, C: VaultSeal, R: SecureRandom, A: VaultAuthorizer>
     /// object metadata, names, kinds, sizes or existence leaks to other callers.
     pub fn list(&self, caller: AppId, owner: VaultOwnerId) -> Result<Vec<ObjectId>, VaultError> {
         self.require(caller, owner, None, VaultAction::List)?;
-        Ok(self.objects.values().filter(|o| o.owner == owner).map(|o| o.id).collect())
+        Ok(self
+            .objects
+            .values()
+            .filter(|o| o.owner == owner)
+            .map(|o| o.id)
+            .collect())
     }
 
-    pub fn replace(&mut self, caller: AppId, owner: VaultOwnerId, id: ObjectId, metadata: &[u8], content: &[u8]) -> Result<u64, VaultError> {
+    pub fn replace(
+        &mut self,
+        caller: AppId,
+        owner: VaultOwnerId,
+        id: ObjectId,
+        metadata: &[u8],
+        content: &[u8],
+    ) -> Result<u64, VaultError> {
         self.require(caller, owner, Some(id), VaultAction::Write)?;
-        let current = self.objects.get(&id).filter(|o| o.owner == owner).ok_or(VaultError::Denied)?;
+        let current = self
+            .objects
+            .get(&id)
+            .filter(|o| o.owner == owner)
+            .ok_or(VaultError::Denied)?;
         validate_input(current.kind, metadata, content)?;
-        let revision = current.revision.checked_add(1).ok_or(VaultError::Capacity)?;
+        let revision = current
+            .revision
+            .checked_add(1)
+            .ok_or(VaultError::Capacity)?;
         let content_ref = self.new_reference(None)?;
         let mut next = self.objects.clone();
         let record = next.get_mut(&id).ok_or(VaultError::Corrupt)?;
@@ -196,9 +294,16 @@ impl<S: VaultStateStore, C: VaultSeal, R: SecureRandom, A: VaultAuthorizer>
         Ok(revision)
     }
 
-    pub fn delete(&mut self, caller: AppId, owner: VaultOwnerId, id: ObjectId) -> Result<(), VaultError> {
+    pub fn delete(
+        &mut self,
+        caller: AppId,
+        owner: VaultOwnerId,
+        id: ObjectId,
+    ) -> Result<(), VaultError> {
         self.require(caller, owner, Some(id), VaultAction::Delete)?;
-        if !self.objects.get(&id).is_some_and(|o| o.owner == owner) { return Err(VaultError::Denied); }
+        if !self.objects.get(&id).is_some_and(|o| o.owner == owner) {
+            return Err(VaultError::Denied);
+        }
         let mut next = self.objects.clone();
         next.remove(&id);
         self.commit(next)
@@ -209,10 +314,19 @@ impl<S: VaultStateStore, C: VaultSeal, R: SecureRandom, A: VaultAuthorizer>
         let plaintext = encode(&next)?;
         let reserved = match self.store.reserve_epoch(self.epoch) {
             Ok(value) if value > self.epoch => value,
-            Ok(_) => { self.poisoned = true; return Err(VaultError::Corrupt); }
-            Err(error) => { self.poisoned = true; return Err(VaultError::Storage(error)); }
+            Ok(_) => {
+                self.poisoned = true;
+                return Err(VaultError::Corrupt);
+            }
+            Err(error) => {
+                self.poisoned = true;
+                return Err(VaultError::Storage(error));
+            }
         };
-        let sealed = self.sealer.seal(self.namespace, reserved, &plaintext).map_err(VaultError::Storage)?;
+        let sealed = self
+            .sealer
+            .seal(self.namespace, reserved, &plaintext)
+            .map_err(VaultError::Storage)?;
         if let Err(error) = self.store.commit(self.epoch, reserved, &sealed) {
             self.poisoned = true;
             return Err(VaultError::Storage(error));
@@ -226,11 +340,15 @@ impl<S: VaultStateStore, C: VaultSeal, R: SecureRandom, A: VaultAuthorizer>
 fn validate_input(kind: u16, metadata: &[u8], content: &[u8]) -> Result<(), VaultError> {
     if kind == 0 || metadata.len() > MAX_METADATA || content.len() > MAX_CONTENT {
         Err(VaultError::InvalidInput)
-    } else { Ok(()) }
+    } else {
+        Ok(())
+    }
 }
 
 fn encode(objects: &BTreeMap<ObjectId, VaultObject>) -> Result<Vec<u8>, VaultError> {
-    if objects.len() > MAX_OBJECTS { return Err(VaultError::Capacity); }
+    if objects.len() > MAX_OBJECTS {
+        return Err(VaultError::Capacity);
+    }
     let mut data = Vec::new();
     data.extend_from_slice(MAGIC);
     data.extend_from_slice(&VERSION.to_be_bytes());
@@ -247,16 +365,24 @@ fn encode(objects: &BTreeMap<ObjectId, VaultObject>) -> Result<Vec<u8>, VaultErr
         data.extend_from_slice(&object.metadata);
         data.extend_from_slice(&object.content);
     }
-    if data.len() > MAX_SNAPSHOT { return Err(VaultError::Capacity); }
+    if data.len() > MAX_SNAPSHOT {
+        return Err(VaultError::Capacity);
+    }
     Ok(data)
 }
 
 fn decode(data: &[u8], epoch: u64) -> Result<BTreeMap<ObjectId, VaultObject>, VaultError> {
-    if data.len() < 12 || data.len() > MAX_SNAPSHOT || &data[..8] != MAGIC { return Err(VaultError::Corrupt); }
+    if data.len() < 12 || data.len() > MAX_SNAPSHOT || &data[..8] != MAGIC {
+        return Err(VaultError::Corrupt);
+    }
     let mut cursor = Cursor { data, offset: 8 };
-    if cursor.u16()? != VERSION { return Err(VaultError::Corrupt); }
+    if cursor.u16()? != VERSION {
+        return Err(VaultError::Corrupt);
+    }
     let count = usize::from(cursor.u16()?);
-    if count > MAX_OBJECTS { return Err(VaultError::Corrupt); }
+    if count > MAX_OBJECTS {
+        return Err(VaultError::Corrupt);
+    }
     let mut objects = BTreeMap::new();
     let mut previous = None;
     let mut refs = alloc::collections::BTreeSet::new();
@@ -268,24 +394,52 @@ fn decode(data: &[u8], epoch: u64) -> Result<BTreeMap<ObjectId, VaultObject>, Va
         let revision = cursor.u64()?;
         let metadata_len = usize::from(cursor.u16()?);
         let content_len = usize::try_from(cursor.u32()?).map_err(|_| VaultError::Corrupt)?;
-        if id.as_bytes() == &[0; 16] || owner.as_bytes() == &[0; 16] || content_ref == [0; 16]
-            || previous.is_some_and(|p| id <= p) || !refs.insert(content_ref)
-            || kind == 0 || revision == 0 || revision > epoch
-            || metadata_len > MAX_METADATA || content_len > MAX_CONTENT
-        { return Err(VaultError::Corrupt); }
+        if id.as_bytes() == &[0; 16]
+            || owner.as_bytes() == &[0; 16]
+            || content_ref == [0; 16]
+            || previous.is_some_and(|p| id <= p)
+            || !refs.insert(content_ref)
+            || kind == 0
+            || revision == 0
+            || revision > epoch
+            || metadata_len > MAX_METADATA
+            || content_len > MAX_CONTENT
+        {
+            return Err(VaultError::Corrupt);
+        }
         let metadata = cursor.take(metadata_len)?.to_vec();
         let content = cursor.take(content_len)?.to_vec();
-        objects.insert(id, VaultObject { id, owner, kind, content_ref, revision, metadata, content });
+        objects.insert(
+            id,
+            VaultObject {
+                id,
+                owner,
+                kind,
+                content_ref,
+                revision,
+                metadata,
+                content,
+            },
+        );
         previous = Some(id);
     }
-    if cursor.offset != data.len() { return Err(VaultError::Corrupt); }
+    if cursor.offset != data.len() {
+        return Err(VaultError::Corrupt);
+    }
     Ok(objects)
 }
 
-struct Cursor<'a> { data: &'a [u8], offset: usize }
+struct Cursor<'a> {
+    data: &'a [u8],
+    offset: usize,
+}
 impl<'a> Cursor<'a> {
     fn take(&mut self, count: usize) -> Result<&'a [u8], VaultError> {
-        let end = self.offset.checked_add(count).filter(|&end| end <= self.data.len()).ok_or(VaultError::Corrupt)?;
+        let end = self
+            .offset
+            .checked_add(count)
+            .filter(|&end| end <= self.data.len())
+            .ok_or(VaultError::Corrupt)?;
         let value = &self.data[self.offset..end];
         self.offset = end;
         Ok(value)
@@ -293,9 +447,15 @@ impl<'a> Cursor<'a> {
     fn fixed<const N: usize>(&mut self) -> Result<[u8; N], VaultError> {
         self.take(N)?.try_into().map_err(|_| VaultError::Corrupt)
     }
-    fn u16(&mut self) -> Result<u16, VaultError> { Ok(u16::from_be_bytes(self.fixed()?)) }
-    fn u32(&mut self) -> Result<u32, VaultError> { Ok(u32::from_be_bytes(self.fixed()?)) }
-    fn u64(&mut self) -> Result<u64, VaultError> { Ok(u64::from_be_bytes(self.fixed()?)) }
+    fn u16(&mut self) -> Result<u16, VaultError> {
+        Ok(u16::from_be_bytes(self.fixed()?))
+    }
+    fn u32(&mut self) -> Result<u32, VaultError> {
+        Ok(u32::from_be_bytes(self.fixed()?))
+    }
+    fn u64(&mut self) -> Result<u64, VaultError> {
+        Ok(u64::from_be_bytes(self.fixed()?))
+    }
 }
 
 #[cfg(test)]
