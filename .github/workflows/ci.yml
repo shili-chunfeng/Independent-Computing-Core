@@ -73,6 +73,7 @@ jobs:
           cargo test -p icc-crypto-api --doc --locked
           cargo test -p icc-identity-core --doc --locked
           cargo test -p icc-keystore --doc --locked
+          cargo test -p icc-vault-core --doc --locked
 
       - name: All-features tests
         run: cargo test --workspace --all-features --locked
@@ -88,6 +89,8 @@ jobs:
           cargo check -p icc-crypto-api --target thumbv7em-none-eabi --no-default-features --locked
           cargo check -p icc-crypto-rust --target thumbv7em-none-eabi --no-default-features --locked
           cargo check -p icc-keystore --target thumbv7em-none-eabi --no-default-features --locked
+          cargo check -p icc-vault-core --target thumbv7em-none-eabi --no-default-features --locked
+          cargo check -p icc-vault-crypto --target thumbv7em-none-eabi --no-default-features --locked
 
       - name: Install pinned dependency policy tool
         run: |

@@ -1,0 +1,17 @@
+[package]
+name = "icc-vault-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+icc-error = { path = "../icc-error" }
+icc-platform-api = { path = "../../ports/icc-platform-api" }
+icc-types = { path = "../icc-types" }
+
+[dev-dependencies]
+icc-test-support = { path = "../../testing/icc-test-support" }
+
+[lints]
+workspace = true

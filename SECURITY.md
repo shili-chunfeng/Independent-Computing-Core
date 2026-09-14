@@ -1,9 +1,9 @@
 # Security Baseline
 
-Independent Computing Core is currently a **Phase 4 architecture/security
+Independent Computing Core is currently a **Phase 5 architecture/security
 prototype**, not a production security product.
 
-The proposed A1-only KeyStore binds `IdentityKeyId`, purpose, and public key to
+The A1-only KeyStore binds `IdentityKeyId`, purpose, and public key to
 the signing seed, and commits an authenticated snapshot before key lifecycle
 changes become visible. `KeyHandle` is a reference, **not** permission to sign:
 a future trusted service must bind the actual caller before invoking it. Its
@@ -12,10 +12,9 @@ Linux anti-rollback adapter, seal-root provisioning, or App-facing permission
 gate exists. Do not claim actual durable anti-rollback, host-root, physical,
 swap, or crash-dump protection. Identity Core still lacks durable persistence.
 
-PR #4's v2 review remediation binds each descriptor to a trusted never-reused
+Phase 4's v2 review remediation binds each descriptor to a trusted never-reused
 issuance epoch and requires an exclusive, non-stealable Port lease for the
-entire live signing instance. New-head evidence must come from PR #4's actual
-push and PR CI, not its prior green run. The memory test Port models
+entire live signing instance. The memory test Port models
 same-process exclusion only;
 there is no production interprocess/hardware lease, so production revocation
 consistency is not claimed. v1 snapshots are refused by v2 without implicit
@@ -32,6 +31,18 @@ The security model is defined primarily by:
 - `docs/security/Phase_2_Dependency_Review_v0.1.md`
 - `docs/Phase_3_Identity_Core_v0.1.md`
 - `docs/Phase_4_KeyStore_and_Secret_Operations_v0.1.md`
+- `docs/Phase_5_Personal_Vault_and_Object_Storage_v0.1.md`
+
+The Phase 5 Vault proposal keeps IDs separate from grants, gates reads,
+listing and mutations through an injected authority decision, and encrypts
+the complete bounded object snapshot (including metadata). A dedicated
+`VaultStateStore` Port requires atomic commit, unique nonce epochs, trusted
+freshness and a non-stealable lease. These properties have only a single-process
+test model: there is **no production Linux implementation, provisioned Vault
+root key, caller-bound service, or usable App-level access control**. Passing
+tests does not establish real durability, rollback protection or application
+isolation. A request-supplied authorization implementation would invalidate the
+model; real caller verification and grant revocation remain later milestones.
 
 ## Explicit prototype limits
 

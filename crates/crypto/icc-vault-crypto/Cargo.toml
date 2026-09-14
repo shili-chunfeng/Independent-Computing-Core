@@ -1,0 +1,20 @@
+[package]
+name = "icc-vault-crypto"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+icc-crypto-api = { path = "../icc-crypto-api" }
+icc-error = { path = "../../core/icc-error" }
+icc-platform-api = { path = "../../ports/icc-platform-api" }
+
+[dev-dependencies]
+icc-crypto-rust = { path = "../icc-crypto-rust" }
+icc-test-support = { path = "../../testing/icc-test-support" }
+icc-types = { path = "../../core/icc-types" }
+icc-vault-core = { path = "../../core/icc-vault-core" }
+
+[lints]
+workspace = true
