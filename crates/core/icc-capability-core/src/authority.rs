@@ -1012,19 +1012,37 @@ mod tests {
         let store = InMemoryCapabilityStateStore::new([8; 16]);
         let mut authority = new(store, clock);
         let (id, handle) = authority
-            .grant_root(OWNER, A, Scope::VaultObject(OWNER, OBJECT), Rights::READ, None)
+            .grant_root(
+                OWNER,
+                A,
+                Scope::VaultObject(OWNER, OBJECT),
+                Rights::READ,
+                None,
+            )
             .unwrap();
         let mut executions = 0;
         authority
-            .execute(A, handle, Scope::VaultObject(OWNER, OBJECT), Rights::READ, || {
-                executions += 1;
-            })
+            .execute(
+                A,
+                handle,
+                Scope::VaultObject(OWNER, OBJECT),
+                Rights::READ,
+                || {
+                    executions += 1;
+                },
+            )
             .unwrap();
         authority.revoke(OWNER, id).unwrap();
         assert_eq!(
-            authority.execute(A, handle, Scope::VaultObject(OWNER, OBJECT), Rights::READ, || {
-                executions += 1;
-            }),
+            authority.execute(
+                A,
+                handle,
+                Scope::VaultObject(OWNER, OBJECT),
+                Rights::READ,
+                || {
+                    executions += 1;
+                }
+            ),
             Err(AuthorityError::Revoked)
         );
         assert_eq!(executions, 1);
