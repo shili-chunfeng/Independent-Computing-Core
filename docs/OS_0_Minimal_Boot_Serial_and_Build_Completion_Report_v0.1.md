@@ -1,6 +1,6 @@
 # OS-0 — Boot, Serial and Build: completion evidence v0.1
 
-**Status:** Implementation and actual CI boot evidence pending; owner review required
+**Status:** Implementation-head push CI green; report/PR HEAD verification pending
 **Base main:** `5f9bc9c7ed90ca09ba12dd0b40359e4a0462c6db`
 **Branch:** `os-0-boot-serial-baseline`; do not merge automatically
 
@@ -8,6 +8,8 @@
 
 - Proposed ADR-0012 records the choice of i386 PC BIOS over x86_64 UEFI and
   AArch64 `virt`, with tooling/debug and portability tradeoffs.
+- The OS-0 threat delta records the BIOS/image/debug trust boundaries and
+  defers kernel memory, IPC and device threats until their primitives exist.
 - One real-mode boot sector creates a normal VM image and two deliberate
   fatal-path images. COM1 reports boot, READY, manual panic and actual #UD
   exception with a fixed protocol. A #DE exception handler also reports a
@@ -33,10 +35,27 @@ these local-only checks; the exact-head CI job must supply the real boot log.
 
 ## Actual CI and final gate
 
-Pending exact-head push and PR CI. The PR must link successful `verify` and
-`os0-boot` jobs from both events before READY FOR OWNER REVIEW. A successful
-image build without actual normal/panic/fault serial observations is not a
-passing OS-0 milestone. Do not merge automatically.
+The implementation-head [push run 34843871972](https://github.com/shili-chunfeng/Independent-Computing-Core/actions/runs/34843871972)
+at `b9bd63144d49569f6514eb97e808ea8773bb53f5` completed **success**.
+Its [OS-0 boot job 103974969182](https://github.com/shili-chunfeng/Independent-Computing-Core/actions/runs/34843871972/job/103974969182)
+installed QEMU 8.2.2, rebuilt all three images to the **same local hashes**,
+ran three negative-test groups and actually booted each mode **twice**. The
+decoded UART lines were exactly:
+
+| VM mode | Serial bytes from each boot |
+|---|---|
+| normal | `ICC OS0 BOOT\r\nICC OS0 READY\r\n` |
+| panic | `ICC OS0 BOOT\r\nICC OS0 PANIC MANUAL\r\n` |
+| fault | `ICC OS0 BOOT\r\nICC OS0 FAULT UD\r\n` |
+
+The same run's [verify job 103974968857](https://github.com/shili-chunfeng/Independent-Computing-Core/actions/runs/34843871972/job/103974968857)
+completed **success** for the locked workspace metadata, architecture
+negative tests, Rust formatting, default/all-feature check, Clippy and tests,
+bare-metal checks, cargo-deny and repeated release builds. The OS-0 threat
+delta and this report are later documentation changes: their exact final push
+and PR HEAD must also pass **both** jobs before READY FOR OWNER REVIEW. An
+image build without normal/panic/fault VM observations is insufficient.
+Do not merge automatically.
 
 ## Remaining limits
 

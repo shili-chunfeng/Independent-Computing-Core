@@ -34,6 +34,7 @@ The security model is defined primarily by:
 - `docs/Phase_5_Personal_Vault_and_Object_Storage_v0.1.md`
 - `docs/Phase_6_Capability_Authority_and_Revocation_v0.1.md`
 - `docs/OS_0_Minimal_Boot_Serial_and_Build_Baseline_v0.1.md`
+- `docs/OS_0_Boot_Threat_Model_Delta_v0.1.md`
 
 The Phase 5 Vault proposal keeps IDs separate from grants, gates reads,
 listing and mutations through an injected authority decision, and encrypts

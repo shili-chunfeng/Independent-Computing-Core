@@ -205,6 +205,7 @@ caller-bound service/API exists.
 - `docs/Phase_6_Capability_Authority_and_Revocation_Completion_Report_v0.1.md`
 - `docs/OS_0_Minimal_Boot_Serial_and_Build_Baseline_v0.1.md`
 - `docs/OS_0_Minimal_Boot_Serial_and_Build_Completion_Report_v0.1.md`
+- `docs/OS_0_Boot_Threat_Model_Delta_v0.1.md`
 - `docs/adr/ADR-0001` through `ADR-0009` (see individual status), proposed
   `ADR-0010` (Phase 5 storage separation), `ADR-0011` (Phase 6 security state)
   and `ADR-0012` (OS-0 first boot architecture)

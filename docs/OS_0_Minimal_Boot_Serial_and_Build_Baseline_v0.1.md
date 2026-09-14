@@ -55,5 +55,6 @@ adapter is present. Firmware, BIOS load, COM1 emulation and the host QEMU
 binary are trusted for this early laboratory test; no secure/measured boot,
 malicious-firmware resistance, dedicated hardware or user isolation is
 claimed. Assembly is isolated in this OS-specific directory and reviewed
-under proposed ADR-0012. Future OS-1/OS-2 work must define additional kernel
-TCB threats and avoid accidentally treating a BIOS diagnostic as a stable ABI.
+under proposed ADR-0012 and the OS-0 boot threat-model delta. Future OS-1/OS-2
+work must define additional kernel TCB threats and avoid accidentally treating
+a BIOS diagnostic as a stable ABI.
