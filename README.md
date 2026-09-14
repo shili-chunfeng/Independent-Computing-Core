@@ -1,4 +1,4 @@
-# Independent Computing Core — Phase 6 capability prototype review
+# Independent Computing Core — OS-0 boot baseline review
 
 Independent Computing Core (ICC) is a portable personal-computing core intended to move from a Linux/VM prototype toward a future minimal OS without making Linux part of the Domain Core contract.
 
@@ -9,12 +9,28 @@ Phase 5 provides a portable, bounded Personal Vault reference model. Its object 
 are names rather than access grants; authorization is checked before object
 lookup or metadata disclosure, and sealed metadata and content commit as a
 single snapshot. See `docs/Phase_5_Personal_Vault_and_Object_Storage_v0.1.md`.
-Phase 6 proposes a separate capability security-state authority with session
+Merged Phase 6 adds a separate capability security-state authority with session
 handles, scoped explicit delegation, parent-child revocation and restart
 semantics. See `docs/Phase_6_Capability_Authority_and_Revocation_v0.1.md`.
+The proposed OS-0 milestone adds a real i386 PC BIOS VM boot image with
+deterministic COM1 diagnostics and CI QEMU smoke tests. See
+`docs/OS_0_Minimal_Boot_Serial_and_Build_Baseline_v0.1.md` and proposed
+`docs/adr/ADR-0012-os0-i386-bios-first-boot-target.md`.
 There is no production Linux trusted storage, cross-process lease,
 security-state key/clock provisioning, caller-bound service or App permission
 flow yet. The Vault's temporary authorizer is not wired to this service.
+
+Build and inspect the OS-0 boot target with GNU `as`, `ld` and Python 3:
+
+```sh
+make os0-test
+make os0-repro
+make os0-smoke  # requires qemu-system-i386
+```
+
+The normal VM image is `build/os0/icc-os0-normal.img`; its separate QEMU CI job
+checks real normal, panic and CPU-fault boots. This real-mode diagnostic does
+not supply a secure boot chain, kernel isolation or an ICC service runtime.
 
 ## Mandatory project execution contract
 
@@ -187,7 +203,11 @@ caller-bound service/API exists.
 - `docs/Phase_5_Personal_Vault_and_Object_Storage_Completion_Report_v0.1.md`
 - `docs/Phase_6_Capability_Authority_and_Revocation_v0.1.md`
 - `docs/Phase_6_Capability_Authority_and_Revocation_Completion_Report_v0.1.md`
+- `docs/OS_0_Minimal_Boot_Serial_and_Build_Baseline_v0.1.md`
+- `docs/OS_0_Minimal_Boot_Serial_and_Build_Completion_Report_v0.1.md`
+- `docs/OS_0_Boot_Threat_Model_Delta_v0.1.md`
 - `docs/adr/ADR-0001` through `ADR-0009` (see individual status), proposed
-  `ADR-0010` (Phase 5 storage separation) and `ADR-0011` (Phase 6 security state)
+  `ADR-0010` (Phase 5 storage separation), `ADR-0011` (Phase 6 security state)
+  and `ADR-0012` (OS-0 first boot architecture)
 
 This is a prototype architecture/security baseline, not a production security product. See `SECURITY.md` for explicit non-claims and remaining reporting/governance risks.

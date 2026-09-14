@@ -113,3 +113,26 @@ jobs:
           cargo build --workspace --release --all-features --locked
           sha256sum --check /tmp/icc-cargo-lock.sha256
           git diff --exit-code -- Cargo.lock
+
+  os0-boot:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Build image twice and check diagnostics protocol
+        run: |
+          as --version | head -1
+          ld --version | head -1
+          make os0-test
+          make os0-repro
+
+      - name: Install QEMU system emulator
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends qemu-system-x86
+          qemu-system-i386 --version | head -1
+
+      - name: Boot normal panic and CPU-fault images twice in QEMU
+        run: make os0-smoke
