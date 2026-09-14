@@ -1,6 +1,6 @@
 # Security Baseline
 
-Independent Computing Core is currently a **Phase 6 architecture/security
+Independent Computing Core is currently an **OS-0 architecture/security
 prototype**, not a production security product.
 
 The A1-only KeyStore binds `IdentityKeyId`, purpose, and public key to
@@ -33,6 +33,7 @@ The security model is defined primarily by:
 - `docs/Phase_4_KeyStore_and_Secret_Operations_v0.1.md`
 - `docs/Phase_5_Personal_Vault_and_Object_Storage_v0.1.md`
 - `docs/Phase_6_Capability_Authority_and_Revocation_v0.1.md`
+- `docs/OS_0_Minimal_Boot_Serial_and_Build_Baseline_v0.1.md`
 
 The Phase 5 Vault proposal keeps IDs separate from grants, gates reads,
 listing and mutations through an injected authority decision, and encrypts
@@ -50,6 +51,11 @@ models; no actual durable revocation, authenticated IPC caller, cross-process
 lease, or Vault endpoint integration exists yet. Real App access control
 requires a trusted runtime that binds caller identity and routes all Vault
 operations through the authority.
+
+The proposed OS-0 i386 BIOS image demonstrates only VM boot and deterministic
+polled serial/fatal diagnostics. It trusts QEMU and BIOS, runs in 16-bit real
+mode, and has no secure boot, memory/process isolation, ICC service, persistent
+state or protected diagnostic channel. It is not a deployable trust root.
 
 ## Explicit prototype limits
 
