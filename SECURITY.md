@@ -1,6 +1,6 @@
 # Security Baseline
 
-Independent Computing Core is currently a **Phase 5 architecture/security
+Independent Computing Core is currently a **Phase 6 architecture/security
 prototype**, not a production security product.
 
 The A1-only KeyStore binds `IdentityKeyId`, purpose, and public key to
@@ -32,6 +32,7 @@ The security model is defined primarily by:
 - `docs/Phase_3_Identity_Core_v0.1.md`
 - `docs/Phase_4_KeyStore_and_Secret_Operations_v0.1.md`
 - `docs/Phase_5_Personal_Vault_and_Object_Storage_v0.1.md`
+- `docs/Phase_6_Capability_Authority_and_Revocation_v0.1.md`
 
 The Phase 5 Vault proposal keeps IDs separate from grants, gates reads,
 listing and mutations through an injected authority decision, and encrypts
@@ -42,7 +43,13 @@ test model: there is **no production Linux implementation, provisioned Vault
 root key, caller-bound service, or usable App-level access control**. Passing
 tests does not establish real durability, rollback protection or application
 isolation. A request-supplied authorization implementation would invalidate the
-model; real caller verification and grant revocation remain later milestones.
+model. Phase 6 adds a separate capability authority prototype with durable
+grant/revocation semantics, session-local handles and operation-level checks.
+Its storage and reboot-stable clock Ports have only single-process test
+models; no actual durable revocation, authenticated IPC caller, cross-process
+lease, or Vault endpoint integration exists yet. Real App access control
+requires a trusted runtime that binds caller identity and routes all Vault
+operations through the authority.
 
 ## Explicit prototype limits
 

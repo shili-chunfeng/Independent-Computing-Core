@@ -63,6 +63,50 @@ pub trait VaultSeal {
     ) -> Result<Vec<u8>, PlatformError>;
 }
 
+/// Independently provisioned capability security state. The trusted store
+/// guarantees a durable, non-rollbackable committed epoch, non-reused epoch
+/// reservations, atomic sealed-snapshot commits and a non-stealable exclusive
+/// lease held across *every* authorization and operation. A missing snapshot
+/// after provisioning is corruption. The test implementation only models this.
+pub trait CapabilityStateStore {
+    fn acquire_exclusive(&mut self) -> Result<(), PlatformError>;
+    fn release_exclusive(&mut self);
+    fn namespace(&self) -> Result<[u8; 16], PlatformError>;
+    fn load(&self) -> Result<Option<(u64, Vec<u8>)>, PlatformError>;
+    fn reserve_epoch(&mut self, expected_committed: u64) -> Result<u64, PlatformError>;
+    fn commit(
+        &mut self,
+        expected_committed: u64,
+        reserved_epoch: u64,
+        sealed: &[u8],
+    ) -> Result<(), PlatformError>;
+}
+
+/// Internal cryptographic boundary. The sealer must authenticate format,
+/// namespace, revision and the entire snapshot under a capability-specific
+/// key and nonce domain, never the Vault or KeyStore domain.
+pub trait CapabilitySeal {
+    fn seal(
+        &self,
+        namespace: [u8; 16],
+        epoch: u64,
+        plaintext: &[u8],
+    ) -> Result<Vec<u8>, PlatformError>;
+    fn open(
+        &self,
+        namespace: [u8; 16],
+        epoch: u64,
+        sealed: &[u8],
+    ) -> Result<Vec<u8>, PlatformError>;
+}
+
+/// Trusted authority clock. Unlike a boot-relative clock, values share a
+/// stable epoch across restarts and never move backward or wrap. On loss of
+/// this guarantee the adapter must fail closed, including for no-expiry grants.
+pub trait CapabilityClock {
+    fn trusted_time_ms(&self) -> Result<MonotonicMs, PlatformError>;
+}
+
 pub trait SecurityStateStore {
     fn get(&self, key: SecurityStateKey) -> Result<Option<Vec<u8>>, PlatformError>;
     fn put(&mut self, key: SecurityStateKey, value: &[u8]) -> Result<(), PlatformError>;

@@ -91,6 +91,7 @@ jobs:
           cargo check -p icc-keystore --target thumbv7em-none-eabi --no-default-features --locked
           cargo check -p icc-vault-core --target thumbv7em-none-eabi --no-default-features --locked
           cargo check -p icc-vault-crypto --target thumbv7em-none-eabi --no-default-features --locked
+          cargo check -p icc-capability-crypto --target thumbv7em-none-eabi --no-default-features --locked
 
       - name: Install pinned dependency policy tool
         run: |

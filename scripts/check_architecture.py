@@ -154,7 +154,9 @@ PACKAGE_DECLARATION_POLICY: dict[str, frozenset[DependencyDeclaration]] = {
     "icc-capability-core": frozenset(
         {
             path_dependency("icc-error"),
+            path_dependency("icc-platform-api"),
             path_dependency("icc-rights"),
+            path_dependency("icc-test-support", kind="dev"),
             path_dependency("icc-types"),
         }
     ),
@@ -203,6 +205,18 @@ PACKAGE_DECLARATION_POLICY: dict[str, frozenset[DependencyDeclaration]] = {
                 uses_default_features=False,
                 features=("static_secrets", "zeroize"),
             ),
+        }
+    ),
+    "icc-capability-crypto": frozenset(
+        {
+            path_dependency("icc-crypto-api"),
+            path_dependency("icc-error"),
+            path_dependency("icc-platform-api"),
+            path_dependency("icc-crypto-rust", kind="dev"),
+            path_dependency("icc-test-support", kind="dev"),
+            path_dependency("icc-capability-core", kind="dev"),
+            path_dependency("icc-rights", kind="dev"),
+            path_dependency("icc-types", kind="dev"),
         }
     ),
     "icc-keystore": frozenset(

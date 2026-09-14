@@ -10,6 +10,7 @@ members = [
     "crates/ports/icc-platform-api",
     "crates/crypto/icc-crypto-api",
     "crates/crypto/icc-crypto-rust",
+    "crates/crypto/icc-capability-crypto",
     "crates/crypto/icc-keystore",
     "crates/crypto/icc-vault-crypto",
     "crates/testing/icc-test-support",
