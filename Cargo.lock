@@ -324,6 +324,9 @@ dependencies = [
  "icc-crypto-rust",
  "icc-error",
  "icc-platform-api",
+ "icc-test-support",
+ "icc-types",
+ "icc-vault-core",
 ]
 
 [[package]]

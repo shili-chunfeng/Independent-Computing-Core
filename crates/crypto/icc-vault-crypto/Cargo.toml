@@ -12,6 +12,9 @@ icc-platform-api = { path = "../../ports/icc-platform-api" }
 
 [dev-dependencies]
 icc-crypto-rust = { path = "../icc-crypto-rust" }
+icc-test-support = { path = "../../testing/icc-test-support" }
+icc-types = { path = "../../core/icc-types" }
+icc-vault-core = { path = "../../core/icc-vault-core" }
 
 [lints]
 workspace = true

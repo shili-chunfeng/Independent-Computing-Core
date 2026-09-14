@@ -223,6 +223,9 @@ PACKAGE_DECLARATION_POLICY: dict[str, frozenset[DependencyDeclaration]] = {
             path_dependency("icc-error"),
             path_dependency("icc-platform-api"),
             path_dependency("icc-crypto-rust", kind="dev"),
+            path_dependency("icc-test-support", kind="dev"),
+            path_dependency("icc-types", kind="dev"),
+            path_dependency("icc-vault-core", kind="dev"),
         }
     ),
     "icc-test-support": frozenset(

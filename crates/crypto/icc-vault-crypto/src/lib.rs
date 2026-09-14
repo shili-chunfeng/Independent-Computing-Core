@@ -109,6 +109,16 @@ impl<P: CryptoProviderV1> VaultSeal for SoftwareVaultSealer<P> {
 mod tests {
     use super::*;
     use icc_crypto_rust::RustCryptoProviderV1;
+    use icc_test_support::{DeterministicRandom, InMemoryVaultStateStore};
+    use icc_types::{AppId, ObjectId, VaultOwnerId};
+    use icc_vault_core::{VaultAction, VaultAuthorizer, VaultCore, VaultError};
+
+    struct TestAuthority;
+    impl VaultAuthorizer for TestAuthority {
+        fn permits(&self, caller: AppId, owner: VaultOwnerId, _id: Option<ObjectId>, _action: VaultAction) -> bool {
+            caller == AppId::from_bytes([1; 16]) && owner == VaultOwnerId::from_bytes([2; 16])
+        }
+    }
 
     fn sealer(byte: u8) -> SoftwareVaultSealer<RustCryptoProviderV1> {
         SoftwareVaultSealer::new(RustCryptoProviderV1, AeadKey32::from_bytes([byte; 32]))
@@ -145,5 +155,24 @@ mod tests {
             sealer(4).open(namespace, 7, &sealed[..sealed.len() - 1]),
             Err(PlatformError::Corrupt)
         );
+    }
+
+    #[test]
+    fn vault_domain_and_software_sealer_reopen_without_leaking_metadata() {
+        let alice = AppId::from_bytes([1; 16]);
+        let bob = AppId::from_bytes([3; 16]);
+        let owner = VaultOwnerId::from_bytes([2; 16]);
+        let store = InMemoryVaultStateStore::new([8; 16]);
+        let fork = store.fork_for_test();
+        let mut vault = VaultCore::initialize(store, sealer(7), DeterministicRandom::new(9), TestAuthority).unwrap();
+        let id = vault.create(alice, owner, 1, b"private metadata", b"private body").unwrap();
+        assert_eq!(vault.read(bob, owner, id).err(), Some(VaultError::Denied));
+        let (_, ciphertext) = fork.snapshot_for_test().unwrap();
+        assert!(!ciphertext.windows(16).any(|w| w == b"private metadata"));
+        assert!(!ciphertext.windows(12).any(|w| w == b"private body"));
+        drop(vault);
+        assert!(matches!(VaultCore::open(fork.fork_for_test(), sealer(6), DeterministicRandom::new(90), TestAuthority), Err(VaultError::Corrupt)));
+        let reopened = VaultCore::open(fork, sealer(7), DeterministicRandom::new(90), TestAuthority).unwrap();
+        assert_eq!(reopened.read(alice, owner, id).unwrap().content(), b"private body");
     }
 }
