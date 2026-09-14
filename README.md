@@ -175,6 +175,8 @@ caller-bound service/API exists.
 - `docs/Phase_2_Cryptographic_Hardening_Report_v0.1.md`
 - `docs/Phase_3_Identity_Core_v0.1.md`
 - `docs/Phase_3_Identity_Core_Completion_Report_v0.1.md`
-- `docs/adr/ADR-0001` through proposed `ADR-0007`
+- `docs/adr/ADR-0001` through `ADR-0006` (Accepted), proposed `ADR-0007`
+  (Phase 3 owner review), proposed `ADR-0008` (Phase 4 owner review), and
+  proposed `ADR-0009` (Phase 9 owner review)
 
 This is a prototype architecture/security baseline, not a production security product. See `SECURITY.md` for explicit non-claims and remaining reporting/governance risks.
