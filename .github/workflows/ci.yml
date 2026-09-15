@@ -136,3 +136,16 @@ jobs:
 
       - name: Boot normal panic and CPU-fault images twice in QEMU
         run: make os0-smoke
+
+  phase7-ipc:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      ICC_REQUIRE_UNIX_SOCKET: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Bounded protocol, authority and real Unix-service tests
+        run: |
+          python3 --version
+          python3 -m unittest -v services.phase7.test_phase7

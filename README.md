@@ -1,4 +1,4 @@
-# Independent Computing Core — OS-0 boot baseline review
+# Independent Computing Core — Phase 7 IPC service laboratory review
 
 Independent Computing Core (ICC) is a portable personal-computing core intended to move from a Linux/VM prototype toward a future minimal OS without making Linux part of the Domain Core contract.
 
@@ -12,13 +12,18 @@ single snapshot. See `docs/Phase_5_Personal_Vault_and_Object_Storage_v0.1.md`.
 Merged Phase 6 adds a separate capability security-state authority with session
 handles, scoped explicit delegation, parent-child revocation and restart
 semantics. See `docs/Phase_6_Capability_Authority_and_Revocation_v0.1.md`.
-The proposed OS-0 milestone adds a real i386 PC BIOS VM boot image with
+Merged OS-0 adds a real i386 PC BIOS VM boot image with
 deterministic COM1 diagnostics and CI QEMU smoke tests. See
 `docs/OS_0_Minimal_Boot_Serial_and_Build_Baseline_v0.1.md` and proposed
 `docs/adr/ADR-0012-os0-i386-bios-first-boot-target.md`.
-There is no production Linux trusted storage, cross-process lease,
-security-state key/clock provisioning, caller-bound service or App permission
-flow yet. The Vault's temporary authorizer is not wired to this service.
+Phase 7 now proposes a separate Linux Unix-socket laboratory service with a
+bounded versioned wire format, kernel-supplied peer UID binding, session-local
+references and recipient-bound one-use transfer offers. See
+`docs/Phase_7_Service_Runtime_and_Explicit_IPC_v0.1.md`. It protects only a
+volatile sample resource: there is still **no** production Linux trusted
+storage, cross-process lease, security-state key/clock provisioning, Vault or
+KeyStore IPC endpoint, or App-level access-control claim. The Vault's temporary
+authorizer is not wired to Phase 6's CapabilityAuthority.
 
 Build and inspect the OS-0 boot target with GNU `as`, `ld` and Python 3:
 
@@ -26,6 +31,7 @@ Build and inspect the OS-0 boot target with GNU `as`, `ld` and Python 3:
 make os0-test
 make os0-repro
 make os0-smoke  # requires qemu-system-i386
+make phase7-test  # live Unix tests require a host that permits AF_UNIX
 ```
 
 The normal VM image is `build/os0/icc-os0-normal.img`; its separate QEMU CI job
@@ -129,6 +135,7 @@ git diff --exit-code -- Cargo.lock
 python3 scripts/dependency_inventory.py /tmp/icc-cargo-metadata-default.json
 python3 scripts/dependency_inventory.py /tmp/icc-cargo-metadata-all-features.json
 python3 -m unittest discover -s scripts -p 'test_*.py'
+ICC_REQUIRE_UNIX_SOCKET=1 make phase7-test
 python3 scripts/check_architecture.py \
   --default-metadata /tmp/icc-cargo-metadata-default.json \
   --all-features-metadata /tmp/icc-cargo-metadata-all-features.json
@@ -203,6 +210,10 @@ caller-bound service/API exists.
 - `docs/Phase_5_Personal_Vault_and_Object_Storage_Completion_Report_v0.1.md`
 - `docs/Phase_6_Capability_Authority_and_Revocation_v0.1.md`
 - `docs/Phase_6_Capability_Authority_and_Revocation_Completion_Report_v0.1.md`
+- `docs/OS_0_Minimal_Boot_Serial_and_Build_Baseline_v0.1.md`
+- `docs/OS_0_Boot_Threat_Model_Delta_v0.1.md`
+- `docs/Phase_7_Service_Runtime_and_Explicit_IPC_v0.1.md`
+- `docs/Phase_7_Service_Runtime_and_Explicit_IPC_Completion_Report_v0.1.md`
 - `docs/OS_0_Minimal_Boot_Serial_and_Build_Baseline_v0.1.md`
 - `docs/OS_0_Minimal_Boot_Serial_and_Build_Completion_Report_v0.1.md`
 - `docs/OS_0_Boot_Threat_Model_Delta_v0.1.md`
