@@ -250,11 +250,12 @@ class LinuxTests(unittest.TestCase):
                     if path.exists():
                         return proc
                     if proc.poll() is not None:
-                        raise AssertionError(f"service exited: {proc.stderr.read()!r}")
+                        _, error = proc.communicate()
+                        raise AssertionError(f"service exited: {error!r}")
                     time.sleep(0.02)
                 proc.terminate()
-                proc.wait(timeout=3)
-                raise AssertionError("service did not create socket")
+                _, error = proc.communicate(timeout=3)
+                raise AssertionError(f"service did not create socket: {error!r}")
 
             process = launch()
             try:
@@ -265,7 +266,8 @@ class LinuxTests(unittest.TestCase):
                     old = frame(conn, p.OPEN, 2, b"\x02" * 16 + bytes([READ])).payload
                     self.assertEqual(frame(conn, p.READ, 3, old).payload, b"lab")
                 process.terminate()
-                process.wait(timeout=3)
+                _, error = process.communicate(timeout=3)
+                self.assertEqual(process.returncode, 0, error)
                 self.assertFalse(path.exists())
                 process = launch()
                 with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as conn:
@@ -275,6 +277,7 @@ class LinuxTests(unittest.TestCase):
             finally:
                 if process.poll() is None:
                     process.terminate()
-                    process.wait(timeout=3)
+                _, error = process.communicate(timeout=3)
+                self.assertEqual(process.returncode, 0, error)
                 if path.exists():
                     path.unlink()
