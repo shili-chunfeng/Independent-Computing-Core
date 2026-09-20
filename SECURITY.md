@@ -1,6 +1,6 @@
 # Security Baseline
 
-Independent Computing Core is currently an **OS-0 architecture/security
+Independent Computing Core is currently a **Phase 7 architecture/security
 prototype**, not a production security product.
 
 The A1-only KeyStore binds `IdentityKeyId`, purpose, and public key to
@@ -35,6 +35,7 @@ The security model is defined primarily by:
 - `docs/Phase_6_Capability_Authority_and_Revocation_v0.1.md`
 - `docs/OS_0_Minimal_Boot_Serial_and_Build_Baseline_v0.1.md`
 - `docs/OS_0_Boot_Threat_Model_Delta_v0.1.md`
+- `docs/Phase_7_Service_Runtime_and_Explicit_IPC_v0.1.md`
 
 The Phase 5 Vault proposal keeps IDs separate from grants, gates reads,
 listing and mutations through an injected authority decision, and encrypts
@@ -57,6 +58,17 @@ The proposed OS-0 i386 BIOS image demonstrates only VM boot and deterministic
 polled serial/fatal diagnostics. It trusts QEMU and BIOS, runs in 16-bit real
 mode, and has no secure boot, memory/process isolation, ICC service, persistent
 state or protected diagnostic channel. It is not a deployable trust root.
+
+The Phase 7 Unix-socket laboratory service uses kernel `SO_PEERCRED` UID
+credentials and session-bound references, but runs only a volatile sample
+resource. Its CLI launcher intentionally admits only one explicitly configured
+UID; UID reuse, same-UID peer attacks, hostile Linux root/kernel, socket-path
+replacement by the service owner, and durable authority are not covered.
+No Phase 6 `CapabilityAuthority` or Phase 5 Vault production endpoint is
+connected to it; its passing IPC tests do not prove that real App data or
+secrets are isolated. A future composition root must supply trusted storage,
+lease, clock and key provisioning and route every Vault effect through
+`CapabilityAuthority::execute` before App-level enforcement can be claimed.
 
 ## Explicit prototype limits
 
